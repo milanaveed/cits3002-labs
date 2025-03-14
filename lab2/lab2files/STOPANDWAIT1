@@ -1,0 +1,34 @@
+{
+  "module": "stopandwait",
+
+  "messagerate": "1000ms",
+  "bandwidth": "56Kbps",
+  "propagationdelay": "2500ms",
+
+  "hosts": [
+    {
+      "name": "Perth",
+      "x": 50,
+      "y": 50,
+      "winx": 0,
+      "winy": 50,
+      "links": [
+        {
+          "to": "Melbourne"
+        }
+      ]
+    },
+    {
+      "name": "Melbourne",
+      "x": 400,
+      "y": 50,
+      "winx": 550,
+      "winy": 50,
+      "links": [
+        {
+          "to": "Perth"
+        }
+      ]
+    }
+  ]
+}
