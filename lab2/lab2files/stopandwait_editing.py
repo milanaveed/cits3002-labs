@@ -67,7 +67,7 @@ def write_application(message):
 
 DL_DATA = 0
 DL_ACK = 1
-DL_NACK = 2
+DL_NAK = 2
 
 class Frame:
   def __init__(self):
@@ -99,120 +99,131 @@ class Frame:
 
 # The Node class, which must be provided to make the simulator happy. Each node
 # (i.e. computer) in the network topology is represented by an instance of Node.
+#
 class Node:
   def __init__(self):
-    self.lastmsg = None                  # The last application message sent (for possible retransmission)
-    self.lasttimer = None               # The timer ID of the last active timer
-    self.ackexpected = 0                # The sequence number of the ACK we are expecting (0 or 1)
-    self.nextframetosend = 0            # The next sequence number to send (flip-flops between 0 and 1)
-    self.frameexpected = 0              # The sequence number of the DATA frame we're expecting from the other node
-    self.printspaces = '\t' * (nodeinfo.nodenumber * 4)  # Pretty-printing indentation based on node number
+    self.lastmsg = None
+    self.lasttimer = None
+    self.ackexpected = 0
+    self.nextframetosend = 0
+    self.frameexpected = 0
+    self.printspaces = '\t' * (nodeinfo.nodenumber * 4)
 
 
-  # A convenience method that constructs and sends frames according to our protocol's format.
+  # a convenience method that constructs and sends frames according to our
+  # protocol's frame format.
   def transmit_frame(self, msg, kind, seqno):
-    f = Frame()                         # Create a new frame object
+    f = Frame()
 
-    f.kind = kind                      # Set the frame kind (DL_DATA or DL_ACK)
-    f.seq = seqno                      # Set the sequence number
-    f.checksum = 0                     # Placeholder before calculating real checksum
-    f.len = len(msg)                   # Length of the payload (even if it's empty for ACKs)
-    f.msg = msg                        # The actual message or empty bytes for ACKs
+    f.kind = kind
+    f.seq = seqno
+    f.checksum = 0
+    f.len = len(msg)
+    f.msg = msg
 
-    packed = f.pack()                  # Pack the frame with a temporary checksum (0 for now)
+    # first pack the frame into bytes with a zero checksum field
+    packed = f.pack()
 
-    f.checksum = checksums.checksum_ccitt(packed)  # Compute the real checksum
+    # get the checksum of those packed bytes, and set it as the frame checksum
+    f.checksum = checksums.checksum_ccitt(packed)
 
-    packed = f.pack()                  # Repack the frame with the real checksum
+    # now repack the frame with the real checksum
+    packed = f.pack()
 
-    link = 1                           # Assume link 1 is always used in this topology
-    success = write_physical(link, packed)  # Send the packed frame
+    link = 1
+    success = write_physical(link, packed)
 
     if success:
       if kind == DL_ACK:
         print('{}ACK transmitted, seq={}'.format(self.printspaces, seqno))
-      elif kind == DL_NACK:
-        print('{}NACK transmitted, seq={}'.format(self.printspaces, seqno))
       elif kind == DL_DATA:
         print('{}DATA transmitted, seq={}'.format(self.printspaces, seqno))
 
-        # Estimate a suitable timeout based on frame size and link characteristics
         timeout = (len(packed) * (8000000 // linkinfo[link].bandwidth)
           + linkinfo[link].propagationdelay)
 
-        # Start a timer to wait for an ACK
         self.lasttimer = start_timer(Event.TIMER1, 3 * timeout, None)
+      elif kind == DL_NAK:
+        print('{}NAK transmitted, seq={}'.format(self.printspaces, seqno))
       else:
         raise RuntimeError('invalid frame kind {}'.format(kind))
     else:
       print('{}failed to write_physical!'.format(self.printspaces))
 
 
-  # Called by the simulator when the application has data ready to send.
+  # called by the simulator when this node's application layer has a new message
+  # that it wants to deliver.
+  #   destination = the node number of the intended recipient
+  #   message = bytes() containing the message data
+  # note that there is only one other node in this topology, so the destination
+  # is not important.
   def application_ready(self, destination, message):
-    self.lastmsg = message             # Store the message in case we need to retransmit
-    disable_application()              # Prevent further application messages until this one is ACKed
+    self.lastmsg = message
+    disable_application()
 
     print('{}down from application, seq={}'.format(self.printspaces, self.nextframetosend))
 
-    self.transmit_frame(self.lastmsg, DL_DATA, self.nextframetosend)  # Send the DATA frame
-    self.nextframetosend = 1 - self.nextframetosend  # Toggle between 0 and 1 for next frame
+    self.transmit_frame(self.lastmsg, DL_DATA, self.nextframetosend)
+    self.nextframetosend = 1 - self.nextframetosend
 
 
-  # Called by the simulator when a frame is received from the network.
+  # called by the simulator when data is received from one of this node's
+  # network links.
+  #   linkno = the number of the link that the data was received on
+  #   framebytes = bytes() containing the frame data
   def physical_ready(self, linkno, framebytes):
     f = Frame()
-    f.unpack(framebytes)              # Unpack the incoming bytes into a frame
+    f.unpack(framebytes)
 
-    checksum = f.checksum             # Store the original checksum
-    f.checksum = 0                    # Zero out checksum before recomputing
+    checksum = f.checksum
+    f.checksum = 0
+
     if (checksum != checksums.checksum_ccitt(f.pack())):
-      # If checksums don’t match, the frame is corrupted
       print('{}BAD checksum - frame ignored'.format(self.printspaces))
-      self.transmit_frame(bytes([]), DL_NACK, self.ackexpected)
+      stop_timer(self.lasttimer)
+      self.transmit_frame(bytes([]), DL_NAK, self.ackexpected) # TODO
       return
-
+    
     if (f.kind == DL_ACK):
       if (f.seq == self.ackexpected):
         print('{}ACK received, seq={}'.format(self.printspaces, f.seq))
-        stop_timer(self.lasttimer)    # Stop the timer as ACK was received
-        self.ackexpected = 1 - self.ackexpected  # Toggle expected ACK
-        enable_application()          # Allow the application to send the next message
-    elif (f.kind == DL_NACK):
-        if (f.seq == self.ackexpected) and (self.lastmsg is not None):
-          # If we receive a NACK for the expected ACK, we retransmit the last message
-          print('{}NACK received, seq={}'.format(self.printspaces, f.seq))
-          stop_timer(self.lasttimer)      # Stop the timer as NACK was received
-          self.transmit_frame(self.lastmsg, DL_DATA, self.ackexpected)  
+        stop_timer(self.lasttimer)
+        self.ackexpected = 1 - self.ackexpected
+        enable_application()
     elif (f.kind == DL_DATA):
       if (f.seq == self.frameexpected):
-        write_application(f.msg)      # Deliver the message to the application layer
-        self.frameexpected = 1 - self.frameexpected  # Toggle expected frame seq
+        write_application(f.msg)
+        self.frameexpected = 1 - self.frameexpected
         result = 'up to application'
       else:
-        result = 'ignored'            # Duplicate frame, already received
+        result = 'ignored'
       print('{}DATA received, seq={}, {}'.format(self.printspaces, f.seq, result))
-      self.transmit_frame(bytes([]), DL_ACK, f.seq)  # Send ACK regardless of duplicate
+      self.transmit_frame(bytes([]), DL_ACK, f.seq)
+    elif (f.kind == DL_NAK):
+      print('{}NAK received, seq={}'.format(self.printspaces, f.seq))
+      self.transmit_frame(self.lastmsg, DL_DATA, self.ackexpected)
     else:
-      # Unexpected frame type (shouldn’t happen in this protocol)
       print('{}UNEXPECTED FRAME KIND {}'.format(self.printspaces, f.kind))
 
 
-  # Called by the simulator when the timer expires (no ACK received in time).
+  # called by the simulator when a timer expires for the TIMER1 event (which we
+  # use to detect that an ACK hasn't been received in our expected timeframe)
   def timeouts(self):
     print('{}timeout, seq={}'.format(self.printspaces, self.ackexpected))
-    self.transmit_frame(self.lastmsg, DL_DATA, self.ackexpected)  # Retransmit the message
+    self.transmit_frame(self.lastmsg, DL_DATA, self.ackexpected)
 
 
-  # Called once at node startup to register event handlers.
+  # called by the simulator when this node 'boots up'. this is where we should
+  # connect simulator events (such as APPLICATIONREADY) to our event handlers,
+  # such as application_ready()
   def reboot_node(self):
     if (nodeinfo.nodenumber > 1):
       print('This is not a 2-node network!')
       exit(1)
 
-    set_handler(Event.APPLICATIONREADY, self.application_ready)  # App layer ready to send
-    set_handler(Event.PHYSICALREADY, self.physical_ready)        # Frame received
-    set_handler(Event.TIMER1, self.timeouts)                     # Timer expired
+    set_handler(Event.APPLICATIONREADY, self.application_ready)
+    set_handler(Event.PHYSICALREADY, self.physical_ready)
+    set_handler(Event.TIMER1, self.timeouts)
 
     if (nodeinfo.nodenumber == 0):
-      enable_application()            # Start generating application messages for node 0
+      enable_application()

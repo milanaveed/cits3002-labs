@@ -67,7 +67,6 @@ def write_application(message):
 
 DL_DATA = 0
 DL_ACK = 1
-DL_NACK = 2
 
 class Frame:
   def __init__(self):
@@ -131,8 +130,6 @@ class Node:
     if success:
       if kind == DL_ACK:
         print('{}ACK transmitted, seq={}'.format(self.printspaces, seqno))
-      elif kind == DL_NACK:
-        print('{}NACK transmitted, seq={}'.format(self.printspaces, seqno))
       elif kind == DL_DATA:
         print('{}DATA transmitted, seq={}'.format(self.printspaces, seqno))
 
@@ -169,7 +166,6 @@ class Node:
     if (checksum != checksums.checksum_ccitt(f.pack())):
       # If checksums don’t match, the frame is corrupted
       print('{}BAD checksum - frame ignored'.format(self.printspaces))
-      self.transmit_frame(bytes([]), DL_NACK, self.ackexpected)
       return
 
     if (f.kind == DL_ACK):
@@ -178,12 +174,6 @@ class Node:
         stop_timer(self.lasttimer)    # Stop the timer as ACK was received
         self.ackexpected = 1 - self.ackexpected  # Toggle expected ACK
         enable_application()          # Allow the application to send the next message
-    elif (f.kind == DL_NACK):
-        if (f.seq == self.ackexpected) and (self.lastmsg is not None):
-          # If we receive a NACK for the expected ACK, we retransmit the last message
-          print('{}NACK received, seq={}'.format(self.printspaces, f.seq))
-          stop_timer(self.lasttimer)      # Stop the timer as NACK was received
-          self.transmit_frame(self.lastmsg, DL_DATA, self.ackexpected)  
     elif (f.kind == DL_DATA):
       if (f.seq == self.frameexpected):
         write_application(f.msg)      # Deliver the message to the application layer

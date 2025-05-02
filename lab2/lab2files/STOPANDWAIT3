@@ -1,7 +1,7 @@
 {
   "module": "stopandwait",
 
-  "messagerate": "1000ms",
+  "messagerate": "10000ms",
   "bandwidth": "56Kbps",
   "propagationdelay": "2500ms",
   "probframeloss": 3,

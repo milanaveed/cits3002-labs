@@ -69,6 +69,7 @@ DL_DATA = 0
 DL_ACK = 1
 DL_NACK = 2
 
+
 class Frame:
   def __init__(self):
     self.kind = None  # only ever DL_DATA or DL_ACK
@@ -107,6 +108,35 @@ class Node:
     self.nextframetosend = 0            # The next sequence number to send (flip-flops between 0 and 1)
     self.frameexpected = 0              # The sequence number of the DATA frame we're expecting from the other node
     self.printspaces = '\t' * (nodeinfo.nodenumber * 4)  # Pretty-printing indentation based on node number
+
+    self.ack_pending = False  # Flag to indicate if an ACK is pending for this frame
+    self.pending_ack_seq = None  # The sequence number of the pending ACK
+    self.ack_timer = None # Timer ID for the pending ACK
+    self.msg_queue = [] # Queue for app messages waiting to send
+
+  def send_next_message(self):
+    if not self.msg_queue:
+      return
+
+    msg = self.msg_queue[0]
+
+    # If ACK is pending, piggyback it
+    if self.ack_pending:
+      print('{}Piggybacking ACK with DATA'.format(self.printspaces))
+      ack_seq = self.pending_ack_seq
+      self.ack_pending = False
+      self.pending_ack_seq = None
+      if self.ack_timer:
+        stop_timer(self.ack_timer)
+        self.ack_timer = None
+      self.transmit_frame(msg, DL_DATA, self.nextframetosend)
+      print('{}(ACK piggybacked: seq={})'.format(self.printspaces, ack_seq))
+    else:
+      self.transmit_frame(msg, DL_DATA, self.nextframetosend)
+
+    self.lastmsg = msg
+    self.nextframetosend = 1 - self.nextframetosend
+    disable_application()
 
 
   # A convenience method that constructs and sends frames according to our protocol's format.
@@ -150,13 +180,21 @@ class Node:
 
   # Called by the simulator when the application has data ready to send.
   def application_ready(self, destination, message):
-    self.lastmsg = message             # Store the message in case we need to retransmit
-    disable_application()              # Prevent further application messages until this one is ACKed
+    # self.lastmsg = message             # Store the message in case we need to retransmit
+    # disable_application()              # Prevent further application messages until this one is ACKed
+
+    # print('{}down from application, seq={}'.format(self.printspaces, self.nextframetosend))
+
+    # self.transmit_frame(self.lastmsg, DL_DATA, self.nextframetosend)  # Send the DATA frame
+    # self.nextframetosend = 1 - self.nextframetosend  # Toggle between 0 and 1 for next frame
 
     print('{}down from application, seq={}'.format(self.printspaces, self.nextframetosend))
 
-    self.transmit_frame(self.lastmsg, DL_DATA, self.nextframetosend)  # Send the DATA frame
-    self.nextframetosend = 1 - self.nextframetosend  # Toggle between 0 and 1 for next frame
+    self.msg_queue.append(message)
+
+    # If no message is currently being sent, send now
+    if len(self.msg_queue) == 1:
+      self.send_next_message()
 
 
   # Called by the simulator when a frame is received from the network.
@@ -177,7 +215,9 @@ class Node:
         print('{}ACK received, seq={}'.format(self.printspaces, f.seq))
         stop_timer(self.lasttimer)    # Stop the timer as ACK was received
         self.ackexpected = 1 - self.ackexpected  # Toggle expected ACK
-        enable_application()          # Allow the application to send the next message
+        self.msg_queue.pop(0)  # Remove the acknowledged message from the queue
+        enable_application()  # Allow the application to send more messages
+        self.send_next_message()  # Send the next message if available
     elif (f.kind == DL_NACK):
         if (f.seq == self.ackexpected) and (self.lastmsg is not None):
           # If we receive a NACK for the expected ACK, we retransmit the last message
@@ -192,7 +232,18 @@ class Node:
       else:
         result = 'ignored'            # Duplicate frame, already received
       print('{}DATA received, seq={}, {}'.format(self.printspaces, f.seq, result))
-      self.transmit_frame(bytes([]), DL_ACK, f.seq)  # Send ACK regardless of duplicate
+
+    #   self.transmit_frame(bytes([]), DL_ACK, f.seq)  # Send ACK regardless of duplicate
+      # delay sending ACK
+      self.ack_pending = True  # Set the flag to indicate that an ACK is pending
+      self.pending_ack_seq = f.seq
+      # cancel existing acknowledgement timer if running #? why?
+      if self.ack_timer: 
+        stop_timer(self.ack_timer)
+
+      #start piggyback timer for 1 second
+      self.ack_timer = start_timer(Event.TIMER2, 1000000)
+
     else:
       # Unexpected frame type (shouldn’t happen in this protocol)
       print('{}UNEXPECTED FRAME KIND {}'.format(self.printspaces, f.kind))
@@ -203,6 +254,14 @@ class Node:
     print('{}timeout, seq={}'.format(self.printspaces, self.ackexpected))
     self.transmit_frame(self.lastmsg, DL_DATA, self.ackexpected)  # Retransmit the message
 
+  
+  def piggyback_timeout(self):
+    if self.ack_pending:
+        print('{}Piggyback timeout, sending standalone ACK'.format(self.printspaces))
+        self.transmit_frame(bytes([]), DL_ACK, self.pending_ack_seq)
+        self.ack_pending = False
+        self.pending_ack_seq = None
+        self.ack_timer = None
 
   # Called once at node startup to register event handlers.
   def reboot_node(self):
@@ -213,6 +272,7 @@ class Node:
     set_handler(Event.APPLICATIONREADY, self.application_ready)  # App layer ready to send
     set_handler(Event.PHYSICALREADY, self.physical_ready)        # Frame received
     set_handler(Event.TIMER1, self.timeouts)                     # Timer expired
+    set_handler(Event.TIMER2, self.piggyback_timeout)             # Piggyback timer expired
 
-    if (nodeinfo.nodenumber == 0):
-      enable_application()            # Start generating application messages for node 0
+
+    enable_application()    

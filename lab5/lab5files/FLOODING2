@@ -1,0 +1,82 @@
+{
+  "module": "flooding2",
+
+  "messagerate": "200ms",
+  "bandwidth": "56Kbps",
+  "propagationdelay": "100ms",
+
+  "hosts": [
+    {
+      "name": "Perth",
+      "x": 80,
+      "y": 290,
+      "links": [
+        { "to": "Adelaide" }
+      ]
+    },
+    {
+      "name": "Canberra",
+      "x": 440,
+      "y": 390,
+      "links": [
+        { "to": "Melbourne" },
+        { "to": "Sydney" }
+      ]
+    },
+    {
+      "name": "Melbourne",
+      "x": 420,
+      "y": 390,
+      "links": [
+        { "to": "Canberra" },
+        { "to": "Sydney" },
+        { "to": "Hobart" }
+      ]
+    },
+    {
+      "name": "Sydney",
+      "x": 510,
+      "y": 320,
+      "links": [
+        { "to": "Canberra" },
+        { "to": "Melbourne" },
+        { "to": "Hobart" },
+        { "to": "Brisbane" }
+      ]
+    },
+    {
+      "name": "Hobart",
+      "x": 450,
+      "y": 460,
+      "links": [
+        { "to": "Melbourne" },
+        { "to": "Sydney" }
+      ]
+    },
+    {
+      "name": "Brisbane",
+      "x": 520,
+      "y": 220,
+      "links": [
+        { "to": "Sydney" }
+      ]
+    },
+    {
+      "name": "Adelaide",
+      "x": 330,
+      "y": 310,
+      "links": [
+        { "to": "Melbourne" },
+        { "to": "Darwin" }
+      ]
+    },
+    {
+      "name": "Darwin",
+      "x": 280,
+      "y": 50,
+      "links": [
+        { "to": "Adelaide" }
+      ]
+    }
+  ]
+}
