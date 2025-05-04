@@ -42,9 +42,11 @@ class Board:
     def __init__(self, size=BOARD_SIZE):
         self.size = size
         # '.' for empty water
+        # Grid to store real ship positions ('S'), hits ('X'), and misses ('o')
         self.hidden_grid = [['.' for _ in range(size)] for _ in range(size)]
-        # display_grid is what the player or an observer sees (no 'S')
+        # display_grid is what the player or an observer sees (no 'S') (no ships shown)
         self.display_grid = [['.' for _ in range(size)] for _ in range(size)]
+        # List of placed ships with their name and positions
         self.placed_ships = []  # e.g. [{'name': 'Destroyer', 'positions': {(r, c), ...}}, ...]
 
     def place_ships_randomly(self, ships=SHIPS):
@@ -61,6 +63,7 @@ class Board:
                 row = random.randint(0, self.size - 1)
                 col = random.randint(0, self.size - 1)
 
+                # Try to place ship only if the space is available
                 if self.can_place_ship(row, col, ship_size, orientation):
                     occupied_positions = self.do_place_ship(row, col, ship_size, orientation)
                     self.placed_ships.append({
@@ -176,6 +179,7 @@ class Board:
             return ('already_shot', None)
         else:
             # In principle, this branch shouldn't happen if 'S', '.', 'X', 'o' are all possibilities
+            print(f"  [!] Error: unexpected cell value '{cell}' at ({row}, {col})")
             return ('already_shot', None)
 
     def _mark_hit_and_check_sunk(self, row, col):
@@ -184,7 +188,7 @@ class Board:
         If that ship's positions become empty, return the ship name (it's sunk).
         Otherwise return None.
         """
-        for ship in self.placed_ships:
+        for ship in self.placed_ships: 
             if (row, col) in ship['positions']:
                 ship['positions'].remove((row, col))
                 if len(ship['positions']) == 0:
