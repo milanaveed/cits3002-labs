@@ -72,10 +72,10 @@ def main():
                 except Exception as e:
                     print(f"[ERROR] Game session error: {e}")
                 finally:
+                    print("hello time to close here") #TODO: failed to close when game ends or one player disconnects
                     p1_conn.close()
                     p2_conn.close()
                     print("[INFO] Game session ended. Connections closed.")
-                    break
 
         except KeyboardInterrupt:
             print("\n[INFO] Server manually stopped. Shutting down.")
@@ -83,6 +83,40 @@ def main():
             print(f"[ERROR] Unexpected server error: {e}")
 
 
+# def main():
+#     # Print a message indicating that the server is starting and listening on the specified host and port
+#     print(f"[INFO] Server listening on {HOST}:{PORT}")
+    
+#     # Create a TCP/IP socket using IPv4 (AF_INET) and TCP (SOCK_STREAM)
+#     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+#         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+#         try: 
+#             # Bind the socket to the host and port so it can receive incoming connections
+#             s.bind((HOST, PORT))
+#             # Start listening for incoming connections; allow up to 2 queued connections
+#             s.listen(2)
+#             # Wait for a client to connect; this call blocks until a connection is received
+#             conn, addr = s.accept()
+#             # Print the address of the connected client
+#             print(f"[INFO] Client connected from {addr}")
+#             # Handle the connection in a context manager to ensure it's closed afterward
+#             with conn:
+#                 # Wrap the socket in file-like objects for easier text-based reading/writing
+#                 rfile = conn.makefile('r')  # To read from client (input stream)
+#                 wfile = conn.makefile('w')  # To write to client (output stream)
+#                 # Run the single-player Battleship game over the connected socket streams
+#                 run_single_player_game_online(rfile, wfile)
+#         except Exception as e:
+#             # After the connection is closed, print a message indicating the client disconnected
+#             print(f"[ERROR] {e}")
+#         finally:
+#             print("[INFO] Client disconnected.")
+
+
+# HINT: For multiple clients, you'd need to:
+# 1. Accept connections in a loop
+# 2. Handle each client in a separate thread
+# 3. Import threading and create a handle_client function
 
 if __name__ == "__main__":
     main()
