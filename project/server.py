@@ -76,7 +76,6 @@ def main():
                     p1_conn.close()
                     p2_conn.close()
                     print("[INFO] Game session ended. Starting a new game session...")
-                    time.sleep(5)  # Wait for 5 seconds before starting a new game
                     
 
         except KeyboardInterrupt:

@@ -103,16 +103,17 @@ def main():
                         print("It's not your turn to fire yet.")
         except KeyboardInterrupt:
             print("\n[INFO] Client exiting due to keyboard interruption.")
+            print("[INFO] Game ended.\n")
             #todo: notify the other side that one player has disconnected
             os._exit(0) # exit the program immediately 
         except Exception as e:
             print(f"[ERROR] An error occurred: {e}")
+            print("[INFO] Game ended.\n")
             # Handle other exceptions
             os._exit(0)
         finally: # Always run this block even if another kind of error occurs (eg. broken pipe, socket error)
+            print("[INFO] Game ended.\n")
             os._exit(0) # exit the program immediately  
-            print("[INFO] Client exiting due to errors.")
-            print("hello hello")
             running = False
             wfile.close() # close the write file
             rfile.close()
