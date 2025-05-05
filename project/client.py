@@ -8,19 +8,22 @@ import os
 import socket
 import threading
 import re
+import time
 
 HOST = '127.0.0.1'
 PORT = 5050
 
 running = True
+can_fire = False
 
 def receive_messages(rfile):
+    global running, can_fire
     """Continuously receive and display messages from the server"""
-    global running
     while running:
         line = rfile.readline()
         if not line:
             print("[INFO] Server disconnected.")
+            os._exit(0) # exit the program immediately
             break
 
         # Process and display the message
@@ -34,8 +37,10 @@ def receive_messages(rfile):
                 if not board_line or board_line.strip() == "":
                     break
                 print(board_line.strip())
+        elif line == "__YOUR TURN__":
+            can_fire = True
         elif line == "__GAME OVER__":
-                print("[INFO] Game ended. Exiting client.\n")
+                print("[INFO] Game ended.\n")
                 running = False
                 os._exit(0) # exit the program immediately
                 break
@@ -49,7 +54,7 @@ def is_valid_coordinate(coord):
 
 
 def main():
-    global running
+    global running, can_fire
     # Set up connection
 
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -76,32 +81,42 @@ def main():
                 # Convert to uppercase for consistency
                 user_input = user_input.strip().upper()
 
-                # how to check if it's not the turn and discard those inputs (don't write into the buffer)
-
                 # Check for quit command
                 if user_input == "QUIT":
                     wfile.write("QUIT\n") # write into a buffer
                     wfile.flush() # send the buffered data to the server immediately
                     print('You quit the game.')
+                    #todo: how to quit the other player immediately when one quits not in his turn?
                     break
                 # Check for valid coordinates
                 elif is_valid_coordinate(user_input):
-                    wfile.write(f"FIRE {user_input}\n")
-                    wfile.flush()
+                    if can_fire:
+                        wfile.write(f"FIRE {user_input}\n")
+                        wfile.flush()
+                        can_fire = False # Reset the turn
+                    else: 
+                        print("It's not your turn to fire yet.")
                 else: # For invalid input
-                    print('Invalid input. Enter a coordinate (e.g. B5) or type "quit" to exit.')
+                    if can_fire:
+                        print('Invalid input. Enter a coordinate (e.g. B5) or type "quit" to exit.')
+                    else:
+                        print("It's not your turn to fire yet.")
         except KeyboardInterrupt:
             print("\n[INFO] Client exiting due to keyboard interruption.")
+            #todo: notify the other side that one player has disconnected
             os._exit(0) # exit the program immediately 
+        except Exception as e:
+            print(f"[ERROR] An error occurred: {e}")
+            # Handle other exceptions
+            os._exit(0)
         finally: # Always run this block even if another kind of error occurs (eg. broken pipe, socket error)
+            os._exit(0) # exit the program immediately  
+            print("[INFO] Client exiting due to errors.")
             print("hello hello")
             running = False
             wfile.close() # close the write file
             rfile.close()
             s.close()
-            print("[INFO] Client exiting due to errors.")
-            os._exit(0) # exit the program immediately  
-
 
 if __name__ == "__main__":
     main()

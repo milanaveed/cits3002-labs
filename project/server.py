@@ -13,6 +13,7 @@ However, if you want to support multiple clients (i.e. progress through further 
 import socket
 import threading
 from battleship import run_single_player_game_online, run_double_player_game_online
+import time
 
 HOST = '127.0.0.1'
 PORT = 5050
@@ -74,8 +75,9 @@ def main():
                 finally:
                     p1_conn.close()
                     p2_conn.close()
-                    print("[INFO] Game session ended. Connections closed.")
-                    break
+                    print("[INFO] Game session ended. Starting a new game session...")
+                    time.sleep(5)  # Wait for 5 seconds before starting a new game
+                    
 
         except KeyboardInterrupt:
             print("\n[INFO] Server manually stopped. Shutting down.")

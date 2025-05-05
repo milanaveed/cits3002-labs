@@ -417,10 +417,11 @@ def run_double_player_game_online(p1_r, p1_w, p2_r, p2_w):
         send(current_w, f"\n{player_name}, it's your turn.")
         send_board(current_w, opponent_board)
 
+        send(current_w, "__YOUR TURN__")
         send(current_w, "Enter coordinate to fire at (e.g. B5):")
         guess = current_r.readline()
         if not guess:
-            send(current_w, "Connection lost or input invalid. Ending game.")
+            send(current_w, "Connection lost. Ending game.")
             send(current_w, "__GAME OVER__")
             send_opponent_msg(turn, "The other player has disconnected.")
             send_opponent_msg(turn, "__GAME OVER__")
