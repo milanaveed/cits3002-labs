@@ -378,6 +378,8 @@ def run_double_player_game_online(p1_r, p1_w, p2_r, p2_w):
 
     p1_r, p1_w: reader/writer for player 1
     p2_r, p2_w: reader/writer for player 2
+
+    #todo: upgrade to place ship manually 
     """
 
     def send(wfile, msg):
@@ -419,48 +421,51 @@ def run_double_player_game_online(p1_r, p1_w, p2_r, p2_w):
         guess = current_r.readline()
         if not guess:
             send(current_w, "Connection lost or input invalid. Ending game.")
+            send(current_w, "__GAME OVER__")
             send_opponent_msg(turn, "The other player has disconnected.")
+            send_opponent_msg(turn, "__GAME OVER__")
             break
         guess = guess.strip()
-        if guess.lower() == 'quit':
+        if guess == 'QUIT':
             send(current_w, "Thanks for playing. Goodbye.")
+            send(current_w, "__GAME OVER__")
             send_opponent_msg(turn, "The other player has quit the game.")
+            send_opponent_msg(turn, "__GAME OVER__")
             break
+        elif 'FIRE' in guess:
+            guess = guess.split(' ')[1]
+            try:
+                row, col = parse_coordinate(guess)
+                result, sunk_ship = opponent_board.fire_at(row, col)
 
-        try:
-            row, col = parse_coordinate(guess)
-            result, sunk_ship = opponent_board.fire_at(row, col)
-
-            if result == 'hit':
-                if sunk_ship:
-                    msg = f"HIT! You sank the {sunk_ship}!"
-                    if opponent_board.all_ships_sunk():
-                        send(current_w, "\nCongratulations! You sank all opponent's ships.")
-                        send(current_w, "__GAME OVER__")
-                        send_board(current_w, opponent_board)
-                        
-                        send_opponent_msg(turn,  msg="\nYou lose. All your ships have been sunk.")
-                        send_opponent_msg(turn, "__GAME OVER__")
-                        # should I send board here to the opponent?
-                        # send_board(other_w, opponent_board)
-                        break
+                if result == 'hit':
+                    if sunk_ship:
+                        msg = f"HIT! You sank the {sunk_ship}!"
+                        if opponent_board.all_ships_sunk():
+                            send(current_w, "\nCongratulations! You sank all opponent's ships.")
+                            send_board(current_w, opponent_board)
+                            send(current_w, "__GAME OVER__")
+                            
+                            send_opponent_msg(turn,  msg="\nYou lose. All your ships have been sunk.")
+                            send_opponent_msg(turn, "__GAME OVER__")
+                            break
+                    else:
+                        msg = "HIT!"
+                elif result == 'miss':
+                    msg = "MISS!"
+                elif result == 'already_shot':
+                    msg = "You already fired at that location."
                 else:
-                    msg = "HIT!"
-            elif result == 'miss':
-                msg = "MISS!"
-            elif result == 'already_shot':
-                msg = "You already fired at that location."
-            else:
-                # In principle, this should not happen
-                msg = "Unknown result."
+                    # In principle, this should not happen
+                    msg = "Unknown result."
 
-            send(current_w, msg)
+                send(current_w, msg)
 
-            turn = 1 - turn  # Switch turns
+                turn = 1 - turn  # Switch turns
 
-        except Exception as e:
-            send(current_w, f"Invalid input: {e}")
-            continue
+            except Exception as e:
+                send(current_w, f"Invalid input: {e}")
+                continue
 
     # Close both writers after game ends
     p1_w.close()

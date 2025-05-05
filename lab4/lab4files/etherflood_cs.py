@@ -105,7 +105,6 @@ class Node:
 
     if carrier_sense(link):
       print('carrier busy @ {}'.format(current_time_usec()))
-      self.schedule_send_on_clear() 
       return
 
     print('sending frame @ {}'.format(current_time_usec()))

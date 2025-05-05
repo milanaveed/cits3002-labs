@@ -23,23 +23,23 @@ def send(wfile, msg):
     wfile.flush()
 
 
-def handle_game(p1_conn, p2_conn):
-    """Sets up file-like objects and starts a multiplayer game."""
-    print("[INFO] Starting a new 2-player game session.")
+# def handle_game(p1_conn, p2_conn):
+#     """Sets up file-like objects and starts a multiplayer game."""
+#     print("[INFO] Starting a new 2-player game session.")
 
-    p1_r = p1_conn.makefile('r')
-    p1_w = p1_conn.makefile('w')
-    p2_r = p2_conn.makefile('r')
-    p2_w = p2_conn.makefile('w')
+#     p1_r = p1_conn.makefile('r')
+#     p1_w = p1_conn.makefile('w')
+#     p2_r = p2_conn.makefile('r')
+#     p2_w = p2_conn.makefile('w')
 
-    try:
-        run_double_player_game_online(p1_r, p1_w, p2_r, p2_w)
-    except Exception as e:
-        print(f"[ERROR] Game session error: {e}")
-    finally:
-        p1_conn.close()
-        p2_conn.close()
-        print("[INFO] Game session ended. Connections closed.")
+#     try:
+#         run_double_player_game_online(p1_r, p1_w, p2_r, p2_w)
+#     except Exception as e:
+#         print(f"[ERROR] Game session error: {e}")
+#     finally:
+#         p1_conn.close()
+#         p2_conn.close()
+#         print("[INFO] Game session ended. Connections closed.")
 
 
 def main():

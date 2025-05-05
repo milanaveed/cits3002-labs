@@ -7,6 +7,7 @@ Simply pipes user input to the server, and prints all server responses.
 import os
 import socket
 import threading
+import re
 
 HOST = '127.0.0.1'
 PORT = 5050
@@ -42,7 +43,10 @@ def receive_messages(rfile):
             # Normal message
             print(line)
 
-#todo: fail to exit when the other side disconnects
+def is_valid_coordinate(coord):
+    """Check if input like 'A1', 'B10' is valid (A-J, 1-10)"""
+    return re.fullmatch(r"[A-Ja-j](10|[1-9])", coord.strip()) is not None
+
 
 def main():
     global running
@@ -68,15 +72,26 @@ def main():
                 user_input = input(">> ")
                 if not user_input:
                     continue
-                try:
-                    wfile.write(user_input + '\n') # write into a buffer
+
+                # Convert to uppercase for consistency
+                user_input = user_input.strip().upper()
+
+                # Check for quit command
+                if user_input == "QUIT":
+                    wfile.write("QUIT\n") # write into a buffer
                     wfile.flush() # send the buffered data to the server immediately
-                except Exception as e:
-                    print(f"[ERROR] Failed to send input: {e}")
+                    print('[INFO] You quit the game.')
                     break
+                # Check for valid coordinates
+                elif is_valid_coordinate(user_input):
+                    wfile.write(f"FIRE {user_input}\n")
+                    wfile.flush()
+                else: # For invalid input
+                    print('Invalid input. Enter a coordinate (e.g. B5) or type "quit" to exit.')
         except KeyboardInterrupt:
             print("\n[INFO] Client exiting due to keyboard interruption.") 
         finally: # Always run this block even if another kind of error occurs (eg. broken pipe, socket error)
+            #? Are these necessary?
             running = False
             wfile.close() # close the write file
             rfile.close()
