@@ -35,7 +35,7 @@ def receive_messages(rfile):
                     break
                 print(board_line.strip())
         elif line == "__GAME OVER__":
-                print("\n[INFO] Game ended. Exiting client.\n")
+                print("[INFO] Game ended. Exiting client.\n")
                 running = False
                 os._exit(0) # exit the program immediately
                 break
@@ -76,11 +76,13 @@ def main():
                 # Convert to uppercase for consistency
                 user_input = user_input.strip().upper()
 
+                # how to check if it's not the turn and discard those inputs (don't write into the buffer)
+
                 # Check for quit command
                 if user_input == "QUIT":
                     wfile.write("QUIT\n") # write into a buffer
                     wfile.flush() # send the buffered data to the server immediately
-                    print('[INFO] You quit the game.')
+                    print('You quit the game.')
                     break
                 # Check for valid coordinates
                 elif is_valid_coordinate(user_input):
@@ -89,14 +91,16 @@ def main():
                 else: # For invalid input
                     print('Invalid input. Enter a coordinate (e.g. B5) or type "quit" to exit.')
         except KeyboardInterrupt:
-            print("\n[INFO] Client exiting due to keyboard interruption.") 
+            print("\n[INFO] Client exiting due to keyboard interruption.")
+            os._exit(0) # exit the program immediately 
         finally: # Always run this block even if another kind of error occurs (eg. broken pipe, socket error)
-            #? Are these necessary?
+            print("hello hello")
             running = False
             wfile.close() # close the write file
             rfile.close()
             s.close()
-            print("\n[INFO] Client shutdown complete.") 
+            print("[INFO] Client exiting due to errors.")
+            os._exit(0) # exit the program immediately  
 
 
 if __name__ == "__main__":
