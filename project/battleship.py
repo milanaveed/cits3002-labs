@@ -423,7 +423,7 @@ def run_double_player_game_online(p1_r, p1_w, p2_r, p2_w):
         send(current_w, "Enter coordinate to fire at (e.g. B5):")
         
         # wait for input with a timeout
-        ready, _, _ = select.select([current_r], [], [], 5) # wait for input for 30 seconds
+        ready, _, _ = select.select([current_r], [], [], 30) # wait for input for 30 seconds
         if not ready:
             send(current_w, "Timeout! You took too long to respond. It's now the other player's turn.")
             send_opponent_msg(turn, "The other player took too long to respond.")
