@@ -86,8 +86,7 @@ def main():
                     wfile.write("QUIT\n") # write into a buffer
                     wfile.flush() # send the buffered data to the server immediately
                     print('You quit the game.')
-                    #todo: how to quit the other player immediately when one quits not in his turn?
-                    break
+                    #todo: how to quit the other player immediately when one quits 
                 # Check for valid coordinates
                 elif is_valid_coordinate(user_input):
                     if can_fire:

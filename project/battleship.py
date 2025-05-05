@@ -9,6 +9,8 @@ Contains core data structures and logic for Battleship, including:
 """
 
 import random
+import time
+import select
 
 # BOARD_SIZE = 10
 # SHIPS = [
@@ -419,6 +421,15 @@ def run_double_player_game_online(p1_r, p1_w, p2_r, p2_w):
 
         send(current_w, "__YOUR TURN__")
         send(current_w, "Enter coordinate to fire at (e.g. B5):")
+        
+        # wait for input with a timeout
+        ready, _, _ = select.select([current_r], [], [], 5) # wait for input for 30 seconds
+        if not ready:
+            send(current_w, "Timeout! You took too long to respond. It's now the other player's turn.")
+            send_opponent_msg(turn, "The other player took too long to respond.")
+            turn = 1 - turn  # Switch turns
+            continue
+        
         guess = current_r.readline()
         if not guess:
             send(current_w, "Connection lost. Ending game.")
