@@ -101,11 +101,15 @@ def main():
                     else:
                         print("It's not your turn to fire yet.")
         except KeyboardInterrupt:
+            wfile.write("QUIT\n") # write into a buffer
+            wfile.flush() # send the buffered data to the server 
             print("\n[INFO] Client exiting due to keyboard interruption.")
             print("[INFO] Game ended.\n")
             #todo: notify the other side that one player has disconnected
             os._exit(0) # exit the program immediately 
         except Exception as e:
+            wfile.write("QUIT\n") # write into a buffer
+            wfile.flush() # send the buffered data to the server 
             print(f"[ERROR] An error occurred: {e}")
             print("[INFO] Game ended.\n")
             # Handle other exceptions
