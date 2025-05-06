@@ -425,18 +425,19 @@ def run_double_player_game_online(p1_r, p1_w, p2_r, p2_w):
         send(current_w, "Enter coordinate to fire at (e.g. B5):")
 
         # wait for input with a timeout
-        ready, _, _ = select.select([current_r, opponent_r], [], [], 10) # wait for input for 30 seconds
+        ready, _, _ = select.select([current_r, opponent_r], [], [], 30) # wait for input for 30 seconds
         if not ready:
             send(current_w, "Timeout! You took too long to respond. It's now the other player's turn.")
             send_opponent_msg(turn, "The other player took too long to respond.")
             turn = 1 - turn  # Switch turns
             continue
-
-        opponent_msg = opponent_r.readline().strip()
-        if opponent_msg == 'QUIT':
-            send(current_w, "The other player has disconnected.")
-            send(current_w, "__GAME OVER__")
-            break
+        
+        if opponent_r in ready:
+            opponent_msg = opponent_r.readline().strip()
+            if opponent_msg == 'QUIT':
+                send(current_w, "The other player has disconnected and forfeited.")
+                send(current_w, "__GAME OVER__")
+                break
         
         guess = current_r.readline()
         if not guess:
@@ -447,8 +448,6 @@ def run_double_player_game_online(p1_r, p1_w, p2_r, p2_w):
             break
         guess = guess.strip()
         if guess == 'QUIT':
-            send(current_w, "Thanks for playing. Goodbye.")
-            send(current_w, "__GAME OVER__")
             send_opponent_msg(turn, "The other player has forfeited the game.")
             send_opponent_msg(turn, "__GAME OVER__")
             break

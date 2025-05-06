@@ -86,7 +86,7 @@ def main():
                     wfile.write("QUIT\n") # write into a buffer
                     wfile.flush() # send the buffered data to the server immediately
                     print('You quit the game.')
-                    #todo: how to quit the other player immediately when one quits 
+                    running = False
                 # Check for valid coordinates
                 elif is_valid_coordinate(user_input):
                     if can_fire:
@@ -105,7 +105,6 @@ def main():
             wfile.flush() # send the buffered data to the server 
             print("\n[INFO] Client exiting due to keyboard interruption.")
             print("[INFO] Game ended.\n")
-            #todo: notify the other side that one player has disconnected
             os._exit(0) # exit the program immediately 
         except Exception as e:
             wfile.write("QUIT\n") # write into a buffer
@@ -116,8 +115,8 @@ def main():
             os._exit(0)
         finally: # Always run this block even if another kind of error occurs (eg. broken pipe, socket error)
             print("[INFO] Game ended.\n")
-            os._exit(0) # exit the program immediately  
             running = False
+            os._exit(0) # exit the program immediately  
             wfile.close() # close the write file
             rfile.close()
             s.close()
