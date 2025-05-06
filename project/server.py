@@ -14,70 +14,88 @@ import socket
 import threading
 from battleship import run_single_player_game_online, run_double_player_game_online
 import time
+import queue
 
 HOST = '127.0.0.1'
 PORT = 5050
+
+total_connections = 0
+num_active_players = 0
+connection_waiting_queue = queue.Queue()
+active_players = {}
+player_id = 0
+lock = threading.Lock()
+
 
 def send(wfile, msg):
     """Helper function to send a message with newline + flush."""
     wfile.write(msg + '\n')
     wfile.flush()
 
+def accept_connections(s):
+    """Accept incoming connections continuously."""
+    global total_connections, connection_waiting_queue, num_active_players, active_players, player_id
 
-# def handle_game(p1_conn, p2_conn):
-#     """Sets up file-like objects and starts a multiplayer game."""
-#     print("[INFO] Starting a new 2-player game session.")
+    try:
+        while True:
+            conn, addr = s.accept()
+            total_connections += 1
+            if num_active_players < 2:
+                player_id += 1
+                if num_active_players == 0:
+                    send(conn.makefile('w'), "Connected to server. Waiting for another player to join...")
+                elif num_active_players == 1:
+                    send(conn.makefile('w'), "Both players connected. Starting game...")    
+                print(f"[INFO] A player connected from {addr}.")
+                with lock:
+                    active_players[player_id] = conn
+                num_active_players+=1
+            else: # If two players are already connected, reject additional clients
+                send(conn.makefile('w'), "__CLIENT REJECTED__")
+                print(f"[INFO] Rejected connection from {addr}. The game is full at the moment.")
+                conn.close()
+    except Exception as e:
+        print(f"[ERROR] Connection error: {e}")
 
-#     p1_r = p1_conn.makefile('r')
-#     p1_w = p1_conn.makefile('w')
-#     p2_r = p2_conn.makefile('r')
-#     p2_w = p2_conn.makefile('w')
-
-#     try:
-#         run_double_player_game_online(p1_r, p1_w, p2_r, p2_w)
-#     except Exception as e:
-#         print(f"[ERROR] Game session error: {e}")
-#     finally:
-#         p1_conn.close()
-#         p2_conn.close()
-#         print("[INFO] Game session ended. Connections closed.")
-
+def handle_client(conn, addr):
+    pass
 
 def main():
+    global num_active_players, connection_waiting_queue, active_players
+
     print(f"[INFO] Server listening on {HOST}:{PORT}")
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         s.bind((HOST, PORT))
         s.listen()
+        print("[INFO] Waiting for 2 players to start the game...")
+
+        acceptor_thread = threading.Thread(target=accept_connections, args=(s,), daemon=True)
+        acceptor_thread.start()
 
         try:
             while True:
-                print("[INFO] Waiting for Player 1...")
-                p1_conn, addr1 = s.accept()
-                print(f"[INFO] Player 1 connected from {addr1}")
-                send(p1_conn.makefile('w'), "Waiting for Player 2 to join...")
+                if num_active_players == 2:
+                    # Wait for two players to connect
+                    print("[INFO] Starting game session...")
+                    p1_conn = list(active_players.values())[0]
+                    p2_conn = list(active_players.values())[1]
 
-                print("[INFO] Waiting for Player 2...")
-                p2_conn, addr2 = s.accept()
-                print(f"[INFO] Player 2 connected from {addr2}")
+                    p1_r = p1_conn.makefile('r')
+                    p1_w = p1_conn.makefile('w')
+                    p2_r = p2_conn.makefile('r')
+                    p2_w = p2_conn.makefile('w')
 
-                send(p1_conn.makefile('w'), "Player 2 has joined. Starting game...")
-
-                p1_r = p1_conn.makefile('r')
-                p1_w = p1_conn.makefile('w')
-                p2_r = p2_conn.makefile('r')
-                p2_w = p2_conn.makefile('w')
-
-                try:
-                    run_double_player_game_online(p1_r, p1_w, p2_r, p2_w)
-                except Exception as e:
-                    print(f"[ERROR] Game session error: {e}")
-                finally:
-                    p1_conn.close()
-                    p2_conn.close()
-                    print("[INFO] Game session ended. Starting a new game session...")
-                    
-
+                    try:
+                        run_double_player_game_online(p1_r, p1_w, p2_r, p2_w)
+                    except Exception as e:
+                        print(f"[ERROR] Game session error: {e}")
+                    finally:
+                        num_active_players = 0
+                        p1_conn.close()
+                        p2_conn.close()
+                        print("[INFO] Game session ended. Waiting for players to join...")
+        
         except KeyboardInterrupt:
             print("\n[INFO] Server manually stopped. Shutting down.")
         except Exception as e:

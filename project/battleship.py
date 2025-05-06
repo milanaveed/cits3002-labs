@@ -400,7 +400,6 @@ def run_double_player_game_online(p1_r, p1_w, p2_r, p2_w):
     def send_opponent_msg(current_turn, msg):
         send(players[1 - current_turn][1], msg)
 
-
     # Setup boards
     p1_board = Board()
     p2_board = Board()

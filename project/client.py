@@ -43,7 +43,10 @@ def receive_messages(rfile):
                 print("[INFO] Game ended.\n")
                 running = False
                 os._exit(0) # exit the program immediately
-                break
+        elif line == "__CLIENT REJECTED__":
+            print("[INFO] The game is full at the moment. Please try again later.")
+            running = False
+            os._exit(0)
         else:
             # Normal message
             print(line)
