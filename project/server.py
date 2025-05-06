@@ -45,15 +45,25 @@ def accept_connections(s):
                 if num_active_players == 0:
                     send(conn.makefile('w'), "Connected to server. Waiting for another player to join...")
                 elif num_active_players == 1:
-                    send(conn.makefile('w'), "Both players connected. Starting game...")    
+                    send(conn.makefile('w'), "Both players connected. Starting game...")
+                    
                 print(f"[INFO] A player connected from {addr}.")
+
                 with lock:
                     active_players[player_id] = conn
+                
                 num_active_players+=1
+                
+                # client_thread = threading.Thread(target=handle_client, args=(conn, addr), daemon=True)
+                # client_thread.start()
             else: # If two players are already connected, reject additional clients
-                send(conn.makefile('w'), "__CLIENT REJECTED__")
-                print(f"[INFO] Rejected connection from {addr}. The game is full at the moment.")
-                conn.close()
+                # send(conn.makefile('w'), "__CLIENT REJECTED__")
+                # print(f"[INFO] Rejected connection from {addr}. The game is full at the moment.")
+
+                connection_waiting_queue.put((conn, addr))
+                send(conn.makefile('w'), "__SPECTATOR__")
+                print(f"[INFO] New connection from {addr}. The number of total connections: {total_connections}")
+                send(conn.makefile('w'), "Connected to server. Currently in the waiting lobby...You are a spectator.")
     except Exception as e:
         print(f"[ERROR] Connection error: {e}")
 
@@ -92,6 +102,7 @@ def main():
                         print(f"[ERROR] Game session error: {e}")
                     finally:
                         num_active_players = 0
+                        active_players.clear()
                         p1_conn.close()
                         p2_conn.close()
                         print("[INFO] Game session ended. Waiting for players to join...")
