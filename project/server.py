@@ -99,6 +99,7 @@ def handle_client(id, conn, current_r, current_w, spectator_mode):
                 current_players[0] = (id, conn, current_r, current_w)
         elif id == left_player_id and game_status == "ONE PLAYER LEFT":
             spectator_mode = False
+            restored = True
         else:
             connection_waiting_queue.put((id, conn, current_r, current_w))
             spectator_mode = True
@@ -119,9 +120,7 @@ def handle_client(id, conn, current_r, current_w, spectator_mode):
 
     with lock:
         player_number = get_player_number(id)
-        current_players[player_number] = (id, conn, current_r, current_w) #?
-        restored = True if player_number in shared_boards else False #todo: clean up shared_boards when game ends
-
+        # restored = True if player_number in shared_boards else False 
 
     send(current_w, f"Welcome back Player {id}!" if restored else f"Welcome Player {id}!")
      # Create or restore board
@@ -132,16 +131,6 @@ def handle_client(id, conn, current_r, current_w, spectator_mode):
         shared_boards[player_number] = board
         send(current_w, f"Your board is ready.")
         print(f"[GAME] Player {id}'s board is ready.") 
-
-    # with lock:
-    #     if player_number not in shared_boards:
-    #         board = Board()
-    #         board.place_ships_randomly()
-    #         shared_boards[player_number] = board
-    #         send(current_w, f"Your board is ready.")
-    #     else:
-    #         board = shared_boards[player_number] # todo: no need to restore own board?
-    #         send(current_w, f"Your board is restored.")
 
     # Wait for both players to be ready
     if not restored:
@@ -207,7 +196,7 @@ def handle_client(id, conn, current_r, current_w, spectator_mode):
                             game_status = "ONE PLAYER LEFT"
                             left_player_id = opponent_id
                             game_ready_cond.notify_all()
-                        # todo: set_timer()
+                        # todo: set_timer() to count 60 seconds, when timeout, change the game status to "FORFEITED", notify win and broadcast to spectators.
                         # send(current_w, "__GAME OVER__")
                         # with game_ready_cond:
                         #     game_status = "DISCONNECTED"
