@@ -101,9 +101,9 @@ def handle_client(id, conn, current_r, current_w, spectator_mode):
     global shared_boards, current_turn, game_status, left_player_id
     restored = False
 
-    print('current_players:', current_players)
-    print('left_player_id:', left_player_id)
-    print('game_status:', game_status)
+    # print('current_players:', current_players)
+    # print('left_player_id:', left_player_id)
+    # print('game_status:', game_status)
     with lock:
         if len(current_players) < 2:
             spectator_mode = False
@@ -112,10 +112,10 @@ def handle_client(id, conn, current_r, current_w, spectator_mode):
             else:
                 current_players[0] = (id, conn, current_r, current_w)
         elif id == left_player_id and game_status == "ONE PLAYER LEFT":
+            print('come on b aby')
             spectator_mode = False
             restored = True
-            with lock:
-                game_status = "RUNNING"
+            game_status = "RUNNING"
         else:
             connection_waiting_queue.put((id, conn, current_r, current_w))
             spectator_mode = True
@@ -137,6 +137,7 @@ def handle_client(id, conn, current_r, current_w, spectator_mode):
         player_number = get_player_number(id)
         # restored = True if player_number in shared_boards else False 
 
+    print("f1")
     send(current_w, f"Welcome back Player {id}!" if restored else f"Welcome Player {id}!")
      # Create or restore board
 
@@ -247,10 +248,6 @@ def handle_client(id, conn, current_r, current_w, spectator_mode):
                     with lock:
                         current_turn = 1 - current_turn
                     break
-                    # with game_ready_cond:
-                    #     game_status = "DISCONNECTED"
-                    #     game_ready_cond.notify_all()
-                    # break
 
                 guess = guess.strip()
                 if guess == 'QUIT':
