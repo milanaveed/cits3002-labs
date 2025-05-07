@@ -117,6 +117,7 @@ def handle_client(id, conn, current_r, current_w, spectator_mode):
             restored = True
             game_status = "RUNNING"
         else:
+            print('num current players:', len(current_players))
             connection_waiting_queue.put((id, conn, current_r, current_w))
             spectator_mode = True
 
@@ -312,14 +313,15 @@ def handle_client(id, conn, current_r, current_w, spectator_mode):
             num_player_ready -= 1
             if game_status == "FORFEITED":
                 send(current_w, "The other player forfeited the game. You win!")
-                send(current_w, "__GAME OVER__")
                 broadcast_to_spectators(f"Player {opponent_id} forfeited the game. Player {id} win!")
+                send(current_w, "__GAME OVER__")
                 game_status = "OVER"
             if game_status == "OVER":
                 current_players.clear()
                 shared_boards.clear()
                 left_player_id = -1
                 num_player_ready = 0
+                print('game over, len(current_players):', len(current_players))
     conn.close()
     print(f"[INFO] Game session ended for player {player_number+1}.")
 
