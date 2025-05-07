@@ -75,137 +75,182 @@ def send_board(wfile, board):
             send(wfile, f"{row_label:2} {row_str}")
         send(wfile, "")  # end of board
 
-def broad_cast_to_spectators(msg):
+def broadcast_to_spectators(msg):
     """Send a message to all spectators."""
     global connection_waiting_queue
     with lock:
         for connection in list(connection_waiting_queue.queue):
             send(connection[3], msg)  # connection[3] is the writer
 
+def broadcast_board_to_spectators(board, msg):
+    """Send the current board state to all spectators."""
+    global connection_waiting_queue
+    with lock:
+        for connection in list(connection_waiting_queue.queue):
+            writer = connection[3]
+            send(writer, msg)
+            send_board(writer, board)
+
 def handle_client(id, conn, current_r, current_w, spectator_mode):
-    """Handle a single client connection."""
-    global total_connections, num_active_players, connection_waiting_queue, active_players, num_player_ready, game_ready, shared_boards, current_turn
-    # If in spectator mode
+    global total_connections, num_active_players, connection_waiting_queue
+    global active_players, num_player_ready, game_ready
+    global shared_boards, current_turn, game_status
+
+    # Spectator handling
     if spectator_mode:
         send(current_w, "Connected to server. Currently in the waiting lobby...")
         send(current_w, "__SPECTATOR__")
+        while spectator_mode:
+            message = current_r.readline().strip()
+            if message == "QUIT":
+                print(f"[INFO] Spectator with ID {id} disconnected.")
+                with lock:
+                    total_connections -= 1
+                    remove_connection(id)
+                conn.close()
+                return
 
-    while spectator_mode:
-        message = current_r.readline().strip()
-        if message == "QUIT":
-            print(f"[INFO] Spectator with ID {id} disconnected.")
-            with lock:
-                total_connections -= 1
-                remove_connection(id)
-                print("connection waiting queue:", connection_waiting_queue)
-            conn.close()
-            break
+    # Player setup
+    send(current_w, f"Welcome player {id}!")
 
-        #todo: game status changes and spectator_mode might change
-
-    if not spectator_mode:
-        # If not in spectator mode, start the game
-        #if not disconnected, if it's the start of a new game
-        send(current_w, f"Welcome player {id}!")
-
+    with lock:
         player_number = get_player_number(id)
 
-        board = Board()
-        board.place_ships_randomly()
-        shared_boards[player_number] = board
-        send(current_w, f"You board is ready.")
-        print(f"[GAME] Player {id}'s board is ready.")
+    board = Board()
+    board.place_ships_randomly()
+    shared_boards[player_number] = board
+    send(current_w, f"Your board is ready.")
+    print(f"[GAME] Player {id}'s board is ready.")
 
-        # Waiting for opponent to join and initialise the board
+    # Wait for both players to be ready
+    with game_ready_cond:
+        num_player_ready += 1
+        if num_player_ready == 2:
+            game_status = "RUNNING"
+            print(f"[GAME] Game started.")
+            game_ready_cond.notify_all()
+        else:
+            game_ready_cond.wait()
+
+    # Identify opponent
+    opponent_player_number = 1 - player_number
+    while True:
+        with lock:
+            if opponent_player_number in active_players:
+                opponent_r = active_players[opponent_player_number][2]
+                opponent_w = active_players[opponent_player_number][3]
+                opponent_id = active_players[opponent_player_number][0]
+                break
+
+    send(current_w, f"Game started.")
+    broadcast_to_spectators(f"Game started! Player {id} vs Player {opponent_id}.")
+    opponent_board = shared_boards[opponent_player_number]
+
+    # Game loop
+    while True:
         with game_ready_cond:
-            num_player_ready += 1
-            if num_player_ready == 2:
-                print(f"[GAME] Game started from player {player_number+1}.")
-                game_ready_cond.notify_all()  # Notify all waiting threads
-            else:
-                game_ready_cond.wait()
-        
-        opponent_player_number = 1 - player_number
-        while True:
-            with lock:
-                if opponent_player_number in active_players:
-                    opponent_r = active_players[opponent_player_number][2]
-                    opponent_w = active_players[opponent_player_number][3]
-                    break
-        
-        send(current_w, f"Game started.")
-        opponent_board = shared_boards[opponent_player_number]
+            if game_status != "RUNNING":
+                break
 
-        while True:
-            if current_turn == player_number:
+        if current_turn == player_number:
+            try:
                 print(f"[GAME] Player {id}'s turn.")
-                send(current_w, f"\nPlayer {player_number+1}, it's your turn.")
+                send(current_w, f"\nPlayer {player_number + 1}, it's your turn.")
+                send(opponent_w, f"\nPlayer {player_number + 1}, it's your opponent's turn.")
                 send_board(current_w, opponent_board)
                 send(current_w, "__YOUR TURN__")
                 send(current_w, "Enter coordinate to fire at (e.g. B5):")
 
-                # wait for input with a timeout
-                ready, _, _ = select.select([current_r, opponent_r], [], [], 30) # wait for input for 30 seconds
+                ready, _, _ = select.select([current_r, opponent_r], [], [], 30)
                 if not ready:
-                    send(current_w, "Timeout! You took too long to respond. It's now the other player's turn.")
-                    send(opponent_w, "The other player took too long to respond.")
-                    current_turn = 1 - current_turn  # Switch turns
+                    send(current_w, "Timeout! You took too long.")
+                    send(opponent_w, "The other player timed out.")
+                    current_turn = 1 - current_turn
                     continue
-                
+
+                # Handle disconnect
                 if opponent_r in ready:
                     opponent_msg = opponent_r.readline().strip()
                     if opponent_msg == 'QUIT':
-                        send(current_w, "The other player has disconnected and forfeited.")
+                        send(current_w, "The other player has disconnected.")
                         send(current_w, "__GAME OVER__")
+                        with game_ready_cond:
+                            game_status = "DISCONNECTED"
+                            game_ready_cond.notify_all()
                         break
-                
-                guess = current_r.readline().strip()
-                if guess == 'QUIT':
-                    send(opponent_w, "The other player has forfeited the game.")
+
+                guess = current_r.readline()
+                if not guess:
+                    send(current_w, "Connection lost.")
+                    send(opponent_w, "The other player has disconnected.")
                     send(opponent_w, "__GAME OVER__")
+                    with game_ready_cond:
+                        game_status = "DISCONNECTED"
+                        game_ready_cond.notify_all()
                     break
-                elif 'FIRE' in guess:
+
+                guess = guess.strip()
+                if guess == 'QUIT':
+                    send(opponent_w, "The other player forfeited.")
+                    send(opponent_w, "__GAME OVER__")
+                    with game_ready_cond:
+                        game_status = "FORFEIT"
+                        game_ready_cond.notify_all()
+                    break
+
+                if 'FIRE' in guess:
                     guess = guess.split(' ')[1]
                     try:
                         row, col = parse_coordinate(guess)
                         result, sunk_ship = opponent_board.fire_at(row, col)
-                        shared_boards[opponent_player_number] = opponent_board  # update shared board
+                        shared_boards[opponent_player_number] = opponent_board
+                        broadcast_board_to_spectators(opponent_board, f"\nPlayer {id} fired Player {opponent_id} at {guess}.")
 
                         if result == 'hit':
                             if sunk_ship:
                                 msg = f"HIT! You sank the {sunk_ship}!"
+                                broadcast_to_spectators(f"Result: HIT! Player {id} sank the {sunk_ship}.\n")
                                 if opponent_board.all_ships_sunk():
                                     send(current_w, "\nCongratulations! You sank all opponent's ships.")
                                     send_board(current_w, opponent_board)
                                     send(current_w, "__GAME OVER__")
-                                    send(opponent_w,  msg="\nYou lose. All your ships have been sunk.")
+                                    send(opponent_w, "\nYou lose. All your ships have been sunk.")
                                     send(opponent_w, "__GAME OVER__")
+                                    broadcast_to_spectators(f"Player {id} sank all Player {opponent_id}'s ships. Game ended.\n")
+                                    with game_ready_cond:
+                                        game_status = "OVER"
+                                        game_ready_cond.notify_all()
                                     break
                             else:
                                 msg = "HIT!"
+                                broadcast_to_spectators("Result: HIT!\n")
                         elif result == 'miss':
                             msg = "MISS!"
+                            broadcast_to_spectators("Result: MISS!\n")
                         elif result == 'already_shot':
                             msg = "You already fired at that location."
+                            broadcast_to_spectators("Result: Already shot.\n")
                         else:
-                            # In principle, this should not happen
                             msg = "Unknown result."
 
                         send(current_w, msg)
-
-                        current_turn = 1 - current_turn  # Switch turns
+                        current_turn = 1 - current_turn
 
                     except Exception as e:
                         send(current_w, f"Invalid input: {e}")
-                        continue
 
-        # Close both writers after game ends
-        with lock:
-            num_active_players = 0
-            active_players.clear()
-            current_turn = 0
-        conn.close()
-        print("[INFO] Game session ended. Waiting for players to join...")
+            except Exception as e:
+                print(f"[ERROR] Game error: {e}")
+                break
+
+    # Final cleanup — only one thread will reach this if the game ends
+    with lock:
+        if player_number in active_players:
+            del active_players[player_number]
+            num_active_players -= 1
+            num_player_ready -= 1
+    conn.close()
+    print(f"[INFO] Game session ended for player {player_number}.")
 
 
 def main():
@@ -217,9 +262,6 @@ def main():
         s.bind((HOST, PORT))
         s.listen()
         print("[INFO] Waiting for 2 players to start the game...")
-
-        # acceptor_thread = threading.Thread(target=accept_connections, args=(s,), daemon=True)
-        # acceptor_thread.start()
 
         try:
             while True:
