@@ -36,8 +36,11 @@ game_ready_cond = threading.Condition()
 
 def send(wfile, msg):
     """Helper function to send a message with newline + flush."""
-    wfile.write(msg + '\n')
-    wfile.flush()
+    try:
+        wfile.write(msg + '\n')
+        wfile.flush()
+    except (BrokenPipeError, OSError):
+        print(f"[WARN] Could not send to client: {msg}")
 
 def remove_connection(id):
     """Remove a specific connection from the connection waiting queue."""
@@ -85,11 +88,22 @@ def broadcast_board_to_spectators(board, msg):
             send(writer, msg)
             send_board(writer, board)
 
+def reconnection_timeout_handler():
+    """Handle reconnection timeout."""
+    global game_status
+    with lock:
+        if game_status != "RUNNING":
+            game_status = "FORFEITED"
+
 def handle_client(id, conn, current_r, current_w, spectator_mode):
     global total_connections, connection_waiting_queue
     global current_players, num_player_ready, game_ready
     global shared_boards, current_turn, game_status, left_player_id
+    restored = False
 
+    print('current_players:', current_players)
+    print('left_player_id:', left_player_id)
+    print('game_status:', game_status)
     with lock:
         if len(current_players) < 2:
             spectator_mode = False
@@ -100,6 +114,8 @@ def handle_client(id, conn, current_r, current_w, spectator_mode):
         elif id == left_player_id and game_status == "ONE PLAYER LEFT":
             spectator_mode = False
             restored = True
+            with lock:
+                game_status = "RUNNING"
         else:
             connection_waiting_queue.put((id, conn, current_r, current_w))
             spectator_mode = True
@@ -166,15 +182,25 @@ def handle_client(id, conn, current_r, current_w, spectator_mode):
 
     # Game loop
     while True:
-        with game_ready_cond:
-            if game_status != "RUNNING" and game_status != "ONE PLAYER LEFT":
+        with lock:
+            if game_status == "FORFEITED" or game_status == "OVER":
+                break
+            # elif game_status == "ONE PLAYER LEFT":
+            #     left_player_id = id #! wrong
+            #     break
+            if game_status == "ONE PLAYER LEFT" and id == left_player_id:
                 break
 
+            # print('current_turn:', current_turn)
+            # print('player_number:', player_number)
+        
         if current_turn == player_number:
             try:
                 print(f"[GAME] Player {id}'s turn.")
                 send(current_w, f"\nPlayer {player_number + 1}, it's your turn.")
-                send(opponent_w, f"\nPlayer {player_number + 1}, it's your opponent's turn.")
+                with lock:
+                    if game_status != "ONE PLAYER LEFT":
+                        send(opponent_w, f"\nPlayer {opponent_player_number+1}, it's your opponent's turn.")
                 send_board(current_w, opponent_board)
                 send(current_w, "__YOUR TURN__")
                 send(current_w, "Enter coordinate to fire at (e.g. B5):")
@@ -183,7 +209,8 @@ def handle_client(id, conn, current_r, current_w, spectator_mode):
                 if not ready:
                     send(current_w, "Timeout! You took too long.")
                     send(opponent_w, "The other player timed out.")
-                    current_turn = 1 - current_turn
+                    with lock:
+                        current_turn = 1 - current_turn
                     continue
 
                 # Handle disconnect
@@ -191,11 +218,15 @@ def handle_client(id, conn, current_r, current_w, spectator_mode):
                     opponent_msg = opponent_r.readline().strip()
                     if opponent_msg == 'QUIT':
                         send(current_w, "The other player has disconnected.")
-                        with game_ready_cond:
+                        with lock:
                             game_status = "ONE PLAYER LEFT"
                             left_player_id = opponent_id
-                            game_ready_cond.notify_all()
-                        # todo: set_timer() to count 60 seconds, when timeout, change the game status to "FORFEITED", notify win and broadcast to spectators.
+                            print('left_player_id:', left_player_id)
+                            print('left_player_number', opponent_player_number+1)
+                            # game_ready_cond.notify_all()
+                        timer = threading.Timer(RECONNECT_TIMEOUT, reconnection_timeout_handler)
+                        timer.start()
+                        continue
                         # send(current_w, "__GAME OVER__")
                         # with game_ready_cond:
                         #     game_status = "DISCONNECTED"
@@ -206,12 +237,15 @@ def handle_client(id, conn, current_r, current_w, spectator_mode):
                 if not guess:
                     send(current_w, "Connection lost.")
                     send(opponent_w, "The other player has disconnected.")
-                    #todo: set_timer()
                     # send(opponent_w, "__GAME OVER__")
-                    with game_ready_cond:
+                    with game_ready_cond: #todo: what does that mean?
                         left_player_id = id
                         game_status = "ONE PLAYER LEFT"
                         game_ready_cond.notify_all()
+                    timer = threading.Timer(RECONNECT_TIMEOUT, reconnection_timeout_handler)
+                    timer.start()
+                    with lock:
+                        current_turn = 1 - current_turn
                     break
                     # with game_ready_cond:
                     #     game_status = "DISCONNECTED"
@@ -220,12 +254,16 @@ def handle_client(id, conn, current_r, current_w, spectator_mode):
 
                 guess = guess.strip()
                 if guess == 'QUIT':
-                    send(opponent_w, "The other player forfeited.")
+                    send(opponent_w, "The other player left.")
                     # send(opponent_w, "__GAME OVER__")
                     with game_ready_cond:
                         left_player_id = id
                         game_status = "ONE PLAYER LEFT"
                         game_ready_cond.notify_all()
+                    timer = threading.Timer(RECONNECT_TIMEOUT, reconnection_timeout_handler)
+                    timer.start()
+                    with lock:
+                        current_turn = 1 - current_turn 
                     break
 
                 if 'FIRE' in guess:
@@ -263,21 +301,31 @@ def handle_client(id, conn, current_r, current_w, spectator_mode):
                         msg = "Unknown result."
 
                     send(current_w, msg)
-                    current_turn = 1 - current_turn
+
+                    with lock: #todo: improve
+                        if game_status != "ONE PLAYER LEFT":
+                            current_turn = 1 - current_turn
             except Exception as e:
                 print(f"[ERROR] Game error: {e}")
                 break
 
+
     with lock:
         if player_number in current_players:
             num_player_ready -= 1
+            if game_status == "FORFEITED":
+                send(current_w, "The other player forfeited the game. You win!")
+                send(current_w, "__GAME OVER__")
+                broadcast_to_spectators(f"Player {opponent_id} forfeited the game. Player {id} win!")
+                game_status = "OVER"
             if game_status == "OVER":
                 current_players.clear()
                 shared_boards.clear()
                 left_player_id = -1
                 num_player_ready = 0
     conn.close()
-    print(f"[INFO] Game session ended for player {player_number}.")
+    print(f"[INFO] Game session ended for player {player_number+1}.")
+
 
 
 def main():
