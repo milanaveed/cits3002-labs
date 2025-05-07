@@ -439,12 +439,12 @@ def run_double_player_game_online(p1_r, p1_w, p2_r, p2_w):
                 break
         
         guess = current_r.readline()
-        # if not guess:
-        #     send(current_w, "Connection lost. Ending game.")
-        #     send(current_w, "__GAME OVER__")
-        #     send_opponent_msg(turn, "The other player has forfeited.")
-        #     send_opponent_msg(turn, "__GAME OVER__")
-        #     break
+        if not guess:
+            send(current_w, "Connection lost. Ending game.")
+            send(current_w, "__GAME OVER__")
+            send_opponent_msg(turn, "The other player has forfeited.")
+            send_opponent_msg(turn, "__GAME OVER__")
+            break
         guess = guess.strip()
         if guess == 'QUIT':
             send_opponent_msg(turn, "The other player has forfeited the game.")

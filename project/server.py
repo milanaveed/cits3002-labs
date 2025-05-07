@@ -12,9 +12,10 @@ However, if you want to support multiple clients (i.e. progress through further 
 
 import socket
 import threading
-from battleship import run_single_player_game_online, run_double_player_game_online
+from battleship import run_double_player_game_online
 import time
 import queue
+from battleship import *
 
 HOST = '127.0.0.1'
 PORT = 5050
@@ -23,62 +24,192 @@ total_connections = 0
 num_active_players = 0
 connection_waiting_queue = queue.Queue()
 active_players = {}
-player_id = 0
+client_id = 0
 lock = threading.Lock()
+num_player_ready = 0
+game_ready = False
+shared_boards = {}
+current_turn = 0 # 0 for player 1, 1 for player 2
+game_status = None
 
+game_ready_cond = threading.Condition()
 
 def send(wfile, msg):
     """Helper function to send a message with newline + flush."""
     wfile.write(msg + '\n')
     wfile.flush()
 
-def handle_client(conn, addr):
+def remove_connection(id):
+    """Remove a specific connection from the connection waiting queue."""
+    global connection_waiting_queue
+    temp = queue.Queue()
+    removed = False
+
+    with lock:
+        while not connection_waiting_queue.empty():
+            conn = connection_waiting_queue.get()
+            if conn[0] != id:
+                temp.put(conn)
+            else:
+                removed = True  # Only remove the first match
+
+        # Restore remaining connections
+        while not temp.empty():
+            connection_waiting_queue.put(temp.get())
+
+    return removed
+
+def get_player_number(id):
+    """Get the current player's number."""
+    global active_players
+    for key, value in active_players.items():
+        if value[0] == id:
+            return key
+        
+def send_board(wfile, board):
+        send(wfile, "GRID")
+        send(wfile, "  " + " ".join(str(i + 1).rjust(2) for i in range(board.size)))
+        for r in range(board.size):
+            row_label = chr(ord('A') + r)
+            row_str = " ".join(board.display_grid[r][c] for c in range(board.size))
+            send(wfile, f"{row_label:2} {row_str}")
+        send(wfile, "")  # end of board
+
+def broad_cast_to_spectators(msg):
+    """Send a message to all spectators."""
+    global connection_waiting_queue
+    with lock:
+        for connection in list(connection_waiting_queue.queue):
+            send(connection[3], msg)  # connection[3] is the writer
+
+def handle_client(id, conn, current_r, current_w, spectator_mode):
     """Handle a single client connection."""
-    #todo: game logic for one connection
+    global total_connections, num_active_players, connection_waiting_queue, active_players, num_player_ready, game_ready, shared_boards, current_turn
+    # If in spectator mode
+    if spectator_mode:
+        send(current_w, "Connected to server. Currently in the waiting lobby...")
+        send(current_w, "__SPECTATOR__")
 
-    
-    pass
+    while spectator_mode:
+        message = current_r.readline().strip()
+        if message == "QUIT":
+            print(f"[INFO] Spectator with ID {id} disconnected.")
+            with lock:
+                total_connections -= 1
+                remove_connection(id)
+                print("connection waiting queue:", connection_waiting_queue)
+            conn.close()
+            break
 
+        #todo: game status changes and spectator_mode might change
 
-def accept_connections(s):
-    """Accept incoming connections continuously."""
-    global total_connections, connection_waiting_queue, num_active_players, active_players, player_id
+    if not spectator_mode:
+        # If not in spectator mode, start the game
+        #if not disconnected, if it's the start of a new game
+        send(current_w, f"Welcome player {id}!")
 
-    try:
+        player_number = get_player_number(id)
+
+        board = Board()
+        board.place_ships_randomly()
+        shared_boards[player_number] = board
+        send(current_w, f"You board is ready.")
+        print(f"[GAME] Player {id}'s board is ready.")
+
+        # Waiting for opponent to join and initialise the board
+        with game_ready_cond:
+            num_player_ready += 1
+            if num_player_ready == 2:
+                print(f"[GAME] Game started from player {player_number+1}.")
+                game_ready_cond.notify_all()  # Notify all waiting threads
+            else:
+                game_ready_cond.wait()
+        
+        opponent_player_number = 1 - player_number
         while True:
-            conn, addr = s.accept()
-            total_connections += 1
-            if num_active_players < 2:
-                player_id += 1
-                if num_active_players == 0:
-                    send(conn.makefile('w'), "Connected to server. Waiting for another player to join...")
-                elif num_active_players == 1:
-                    send(conn.makefile('w'), "Both players connected. Starting game...")
-                    
-                print(f"[INFO] A player connected from {addr}.")
+            with lock:
+                if opponent_player_number in active_players:
+                    opponent_r = active_players[opponent_player_number][2]
+                    opponent_w = active_players[opponent_player_number][3]
+                    break
+        
+        send(current_w, f"Game started.")
+        opponent_board = shared_boards[opponent_player_number]
 
-                with lock:
-                    active_players[player_id] = conn
-                
-                num_active_players+=1
-                
-                # client_thread = threading.Thread(target=handle_client, args=(conn, addr), daemon=True)
-                # client_thread.start()
-            else: # If two players are already connected, reject additional clients
-                # send(conn.makefile('w'), "__CLIENT REJECTED__")
-                # print(f"[INFO] Rejected connection from {addr}. The game is full at the moment.")
-                with lock:
-                    connection_waiting_queue.put((conn, addr))
-                send(conn.makefile('w'), "__SPECTATOR__")
-                print(f"[INFO] New connection from {addr}. The number of total connections: {total_connections}")
-                send(conn.makefile('w'), "Connected to server. Currently in the waiting lobby...You are a spectator.")
-    except Exception as e:
-        print(f"[ERROR] Connection error: {e}")
+        while True:
+            if current_turn == player_number:
+                print(f"[GAME] Player {id}'s turn.")
+                send(current_w, f"\nPlayer {player_number+1}, it's your turn.")
+                send_board(current_w, opponent_board)
+                send(current_w, "__YOUR TURN__")
+                send(current_w, "Enter coordinate to fire at (e.g. B5):")
 
+                # wait for input with a timeout
+                ready, _, _ = select.select([current_r, opponent_r], [], [], 30) # wait for input for 30 seconds
+                if not ready:
+                    send(current_w, "Timeout! You took too long to respond. It's now the other player's turn.")
+                    send(opponent_w, "The other player took too long to respond.")
+                    current_turn = 1 - current_turn  # Switch turns
+                    continue
+                
+                if opponent_r in ready:
+                    opponent_msg = opponent_r.readline().strip()
+                    if opponent_msg == 'QUIT':
+                        send(current_w, "The other player has disconnected and forfeited.")
+                        send(current_w, "__GAME OVER__")
+                        break
+                
+                guess = current_r.readline().strip()
+                if guess == 'QUIT':
+                    send(opponent_w, "The other player has forfeited the game.")
+                    send(opponent_w, "__GAME OVER__")
+                    break
+                elif 'FIRE' in guess:
+                    guess = guess.split(' ')[1]
+                    try:
+                        row, col = parse_coordinate(guess)
+                        result, sunk_ship = opponent_board.fire_at(row, col)
+                        shared_boards[opponent_player_number] = opponent_board  # update shared board
+
+                        if result == 'hit':
+                            if sunk_ship:
+                                msg = f"HIT! You sank the {sunk_ship}!"
+                                if opponent_board.all_ships_sunk():
+                                    send(current_w, "\nCongratulations! You sank all opponent's ships.")
+                                    send_board(current_w, opponent_board)
+                                    send(current_w, "__GAME OVER__")
+                                    send(opponent_w,  msg="\nYou lose. All your ships have been sunk.")
+                                    send(opponent_w, "__GAME OVER__")
+                                    break
+                            else:
+                                msg = "HIT!"
+                        elif result == 'miss':
+                            msg = "MISS!"
+                        elif result == 'already_shot':
+                            msg = "You already fired at that location."
+                        else:
+                            # In principle, this should not happen
+                            msg = "Unknown result."
+
+                        send(current_w, msg)
+
+                        current_turn = 1 - current_turn  # Switch turns
+
+                    except Exception as e:
+                        send(current_w, f"Invalid input: {e}")
+                        continue
+
+        # Close both writers after game ends
+        with lock:
+            num_active_players = 0
+            active_players.clear()
+            current_turn = 0
+        conn.close()
+        print("[INFO] Game session ended. Waiting for players to join...")
 
 
 def main():
-    global num_active_players, connection_waiting_queue, active_players
+    global total_connections, connection_waiting_queue, num_active_players, active_players, client_id
 
     print(f"[INFO] Server listening on {HOST}:{PORT}")
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -87,33 +218,44 @@ def main():
         s.listen()
         print("[INFO] Waiting for 2 players to start the game...")
 
-        acceptor_thread = threading.Thread(target=accept_connections, args=(s,), daemon=True)
-        acceptor_thread.start()
+        # acceptor_thread = threading.Thread(target=accept_connections, args=(s,), daemon=True)
+        # acceptor_thread.start()
 
         try:
             while True:
-                if num_active_players == 2:
-                    # Wait for two players to connect
-                    print("[INFO] Starting game session...")
-                    p1_conn = list(active_players.values())[0]
-                    p2_conn = list(active_players.values())[1]
+                conn, addr = s.accept()
+                rfile = conn.makefile('r')
+                wfile = conn.makefile('w')
 
-                    p1_r = p1_conn.makefile('r')
-                    p1_w = p1_conn.makefile('w')
-                    p2_r = p2_conn.makefile('r')
-                    p2_w = p2_conn.makefile('w')
+                total_connections += 1
+                # num_active_players = 3 #!testing
+                if num_active_players < 2:
+                    client_id += 1
+                    send(conn.makefile('w'), "Connected to server. Waiting for opponent...")
+                    print(f"[INFO] A player connected from {addr}.")
 
-                    try:
-                        run_double_player_game_online(p1_r, p1_w, p2_r, p2_w)
-                    except Exception as e:
-                        print(f"[ERROR] Game session error: {e}")
-                    finally:
-                        num_active_players = 0
-                        active_players.clear()
-                        p1_conn.close()
-                        p2_conn.close()
-                        print("[INFO] Game session ended. Waiting for players to join...")
-        
+                    with lock:
+                        if 0 in active_players:
+                            active_players[1] = (client_id, conn, rfile, wfile)
+                        else:
+                            active_players[0] = (client_id, conn, rfile, wfile)
+                    
+                    num_active_players+=1
+                    
+                    client_thread = threading.Thread(target=handle_client, args=(client_id, conn, rfile, wfile, False), daemon=True)
+                    client_thread.start()
+                else: # If two players are already connected
+                    with lock:
+                        connection_waiting_queue.put((client_id, conn, rfile, wfile))
+                    client_thread = threading.Thread(target=handle_client, args=(client_id, conn, rfile, wfile, True), daemon=True)
+                    client_thread.start()
+                    
+                # finally:
+                #     num_active_players = 0
+                #     active_players.clear()
+                #     p1_conn.close()
+                #     p2_conn.close()
+                #     print("[INFO] Game session ended. Waiting for players to join...")
         except KeyboardInterrupt:
             print("\n[INFO] Server manually stopped. Shutting down.")
         except Exception as e:
