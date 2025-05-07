@@ -10,6 +10,33 @@ import threading
 import re
 import time
 
+import os
+import uuid
+import hashlib
+
+ID_FILE = os.path.expanduser("~/.battleship_id")
+
+def get_or_create_client_id():
+    tty = os.ttyname(0)  # Get terminal device, e.g., /dev/ttys000
+    base_name = os.path.basename(tty)  # e.g., ttys000
+
+    id_file = f"/tmp/battleship_client_id_{base_name}"
+
+    if not os.path.exists(id_file):
+        # Generate a unique 3-digit ID and store it
+        random_bytes = os.urandom(4)
+        hashed = hashlib.sha256(random_bytes).hexdigest()
+        short_id = int(hashed, 16) % 1000
+        with open(id_file, "w") as f:
+            f.write(str(short_id))
+    else:
+        with open(id_file, "r") as f:
+            short_id = int(f.read().strip())
+
+    return short_id
+
+client_id = get_or_create_client_id()
+
 HOST = '127.0.0.1'
 PORT = 5050
 
@@ -73,6 +100,8 @@ def main():
         
         rfile = s.makefile('r')
         wfile = s.makefile('w')
+        wfile.write(f"ID {client_id}\n")
+        wfile.flush()
 
         # Start a thread for receiving messages
         receiver_thread = threading.Thread(target=receive_messages, args=(rfile,), daemon=True)
