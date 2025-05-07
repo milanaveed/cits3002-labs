@@ -21,7 +21,6 @@ HOST = '127.0.0.1'
 PORT = 5050
 
 total_connections = 0
-num_active_players = 0
 connection_waiting_queue = queue.Queue()
 current_players = {}
 lock = threading.Lock()
@@ -31,6 +30,7 @@ current_turn = 0 # 0 for player 1, 1 for player 2
 player_ids = {}  # id -> player_num
 game_status = None
 RECONNECT_TIMEOUT = 60
+left_player_id = -1
 
 game_ready_cond = threading.Condition()
 
@@ -86,9 +86,22 @@ def broadcast_board_to_spectators(board, msg):
             send_board(writer, board)
 
 def handle_client(id, conn, current_r, current_w, spectator_mode):
-    global total_connections, num_active_players, connection_waiting_queue
+    global total_connections, connection_waiting_queue
     global current_players, num_player_ready, game_ready
-    global shared_boards, current_turn, game_status
+    global shared_boards, current_turn, game_status, left_player_id
+
+    with lock:
+        if len(current_players) < 2:
+            spectator_mode = False
+            if 0 in current_players:
+                current_players[1] = (id, conn, current_r, current_w)
+            else:
+                current_players[0] = (id, conn, current_r, current_w)
+        elif id == left_player_id and game_status == "ONE PLAYER LEFT":
+            spectator_mode = False
+        else:
+            connection_waiting_queue.put((id, conn, current_r, current_w))
+            spectator_mode = True
 
     # Spectator handling
     if spectator_mode:
@@ -151,9 +164,10 @@ def handle_client(id, conn, current_r, current_w, spectator_mode):
                 opponent_r = current_players[opponent_player_number][2]
                 opponent_w = current_players[opponent_player_number][3]
                 opponent_id = current_players[opponent_player_number][0]
-                opponent_board = shared_boards[opponent_player_number]
                 break
     
+    opponent_board = shared_boards[opponent_player_number]
+
     if restored:
         send(current_w, f"Restored game with Player {opponent_id}.")
         send(opponent_w, f"Restored game with Player {id}.")
@@ -191,6 +205,7 @@ def handle_client(id, conn, current_r, current_w, spectator_mode):
                         send(current_w, "The other player has disconnected.")
                         with game_ready_cond:
                             game_status = "ONE PLAYER LEFT"
+                            left_player_id = opponent_id
                             game_ready_cond.notify_all()
                         # todo: set_timer()
                         # send(current_w, "__GAME OVER__")
@@ -204,8 +219,9 @@ def handle_client(id, conn, current_r, current_w, spectator_mode):
                     send(current_w, "Connection lost.")
                     send(opponent_w, "The other player has disconnected.")
                     #todo: set_timer()
-                    send(opponent_w, "__GAME OVER__")
+                    # send(opponent_w, "__GAME OVER__")
                     with game_ready_cond:
+                        left_player_id = id
                         game_status = "ONE PLAYER LEFT"
                         game_ready_cond.notify_all()
                     break
@@ -219,6 +235,7 @@ def handle_client(id, conn, current_r, current_w, spectator_mode):
                     send(opponent_w, "The other player forfeited.")
                     # send(opponent_w, "__GAME OVER__")
                     with game_ready_cond:
+                        left_player_id = id
                         game_status = "ONE PLAYER LEFT"
                         game_ready_cond.notify_all()
                     break
@@ -265,17 +282,18 @@ def handle_client(id, conn, current_r, current_w, spectator_mode):
 
     with lock:
         if player_number in current_players:
-            num_active_players -= 1
             num_player_ready -= 1
             if game_status == "OVER":
                 current_players.clear()
                 shared_boards.clear()
+                left_player_id = -1
+                num_player_ready = 0
     conn.close()
     print(f"[INFO] Game session ended for player {player_number}.")
 
 
 def main():
-    global total_connections, connection_waiting_queue, num_active_players, current_players
+    global total_connections, connection_waiting_queue, current_players
 
     print(f"[INFO] Server listening on {HOST}:{PORT}")
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -292,41 +310,39 @@ def main():
                 first_line = rfile.readline().strip()
                 if first_line.startswith("ID "):
                     client_id = first_line[3:]
-                    
                 else:
                     send(wfile, "Missing client ID. Disconnecting.")
                     conn.close()
                     continue
 
+                print(f"[INFO] Player {client_id} connected.")
+                # with lock:
+                #     connection_waiting_queue.put((client_id, conn, rfile, wfile))
+                client_thread = threading.Thread(target=handle_client, args=(client_id, conn, rfile, wfile, False), daemon=True)
+                client_thread.start()
+                
 
-                total_connections += 1 # todo: clean up
-                if num_active_players < 2:
-                    # client_id += 1
-                    send(conn.makefile('w'), "Connected to server. Waiting for opponent...")
-                    print(f"[INFO] A player connected from {addr}.")
+                # total_connections += 1 
+                # if num_active_players < 2:
+                #     # client_id += 1
+                #     send(conn.makefile('w'), "Connected to server. Waiting for opponent...")
+                #     print(f"[INFO] A player connected from {addr}.")
 
-                    with lock:
-                        if 0 in current_players:
-                            current_players[1] = (client_id, conn, rfile, wfile)
-                        else:
-                            current_players[0] = (client_id, conn, rfile, wfile)
+                #     with lock:
+                #         if 0 in current_players:
+                #             current_players[1] = (client_id, conn, rfile, wfile)
+                #         else:
+                #             current_players[0] = (client_id, conn, rfile, wfile)
                     
-                    num_active_players+=1
                     
-                    client_thread = threading.Thread(target=handle_client, args=(client_id, conn, rfile, wfile, False), daemon=True)
-                    client_thread.start()
-                else: # If two players are already connected
-                    with lock:
-                        connection_waiting_queue.put((client_id, conn, rfile, wfile))
-                    client_thread = threading.Thread(target=handle_client, args=(client_id, conn, rfile, wfile, True), daemon=True)
-                    client_thread.start()
+                #     client_thread = threading.Thread(target=handle_client, args=(client_id, conn, rfile, wfile, False), daemon=True)
+                #     client_thread.start()
+                # else: # If two players are already connected
+                #     with lock:
+                #         connection_waiting_queue.put((client_id, conn, rfile, wfile))
+                #     client_thread = threading.Thread(target=handle_client, args=(client_id, conn, rfile, wfile, True), daemon=True)
+                #     client_thread.start()
                     
-                # finally:
-                #     num_active_players = 0
-                #     current_players.clear()
-                #     p1_conn.close()
-                #     p2_conn.close()
-                #     print("[INFO] Game session ended. Waiting for players to join...")
         except KeyboardInterrupt:
             print("\n[INFO] Server manually stopped. Shutting down.")
         except Exception as e:
