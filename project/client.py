@@ -15,9 +15,10 @@ PORT = 5050
 
 running = True
 can_fire = False
+spectator_mode = False
 
 def receive_messages(rfile):
-    global running, can_fire
+    global running, can_fire, spectator_mode
     """Continuously receive and display messages from the server"""
     while running:
         line = rfile.readline()
@@ -49,6 +50,7 @@ def receive_messages(rfile):
         #     os._exit(0)
         elif line == "__SPECTATOR__":
             print("You are now in spectator mode. You will see updates but cannot play.")
+            spectator_mode = True
         else:
             # Normal message
             print(line)
@@ -92,7 +94,10 @@ def main():
                     wfile.flush() # send the buffered data to the server immediately
                     print('You quit the game.')
                     running = False
+                    # todo: update the server total_connections and connection_waiting_queue, server should also print a message
                 # Check for valid coordinates
+                elif spectator_mode:
+                    print("You are in spectator mode. You cannot fire.")
                 elif is_valid_coordinate(user_input):
                     if can_fire:
                         wfile.write(f"FIRE {user_input}\n")

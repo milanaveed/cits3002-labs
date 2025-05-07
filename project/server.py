@@ -32,6 +32,14 @@ def send(wfile, msg):
     wfile.write(msg + '\n')
     wfile.flush()
 
+def handle_client(conn, addr):
+    """Handle a single client connection."""
+    #todo: game logic for one connection
+
+    
+    pass
+
+
 def accept_connections(s):
     """Accept incoming connections continuously."""
     global total_connections, connection_waiting_queue, num_active_players, active_players, player_id
@@ -59,16 +67,15 @@ def accept_connections(s):
             else: # If two players are already connected, reject additional clients
                 # send(conn.makefile('w'), "__CLIENT REJECTED__")
                 # print(f"[INFO] Rejected connection from {addr}. The game is full at the moment.")
-
-                connection_waiting_queue.put((conn, addr))
+                with lock:
+                    connection_waiting_queue.put((conn, addr))
                 send(conn.makefile('w'), "__SPECTATOR__")
                 print(f"[INFO] New connection from {addr}. The number of total connections: {total_connections}")
                 send(conn.makefile('w'), "Connected to server. Currently in the waiting lobby...You are a spectator.")
     except Exception as e:
         print(f"[ERROR] Connection error: {e}")
 
-def handle_client(conn, addr):
-    pass
+
 
 def main():
     global num_active_players, connection_waiting_queue, active_players
