@@ -1,0 +1,30 @@
+
+This directory also contains a couple of files to help plot statistics
+of the execution of the 3 flooding algorithms.
+The script runall.py :
+
+    import sys
+    import subprocess
+
+    print('using python {}'.format(sys.executable))
+
+    TOPOLOGIES = ['FLOODING1', 'FLOODING2', 'FLOODING3']
+    EXECUTION_TIME = '20m'
+
+    for topology in TOPOLOGIES:
+      print('running {}'.format(topology))
+      subprocess.run([sys.executable, 'sim.py', '--execution-duration',
+        EXECUTION_TIME, '--stats-csv', 'stats_{}.csv'.format(topology),
+        '--stats-period', '5s', topology])
+
+runs each implementation for 20 minutes of simulated time, and
+captures their statistics every 5 seconds in files named stats_FLOODING1.csv,
+stats_FLOODING2.csv, ...
+
+These files are then used to plot all statistics on one graph, using
+plotstats.py .
+
+In combination, these two files plot the number of messages successfully
+delivered by each flooding implementation.  You may easily change the
+collated statistic by editing the string 'Messages Delivered' in plotstats.py
+to, say, 'Efficiency (AL/PL)'.

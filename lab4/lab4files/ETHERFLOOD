@@ -1,0 +1,45 @@
+{
+  "module": "etherflood_cs",
+
+  "lansegments": [
+    {
+      "name": "LAB",
+      "bandwidth": "10Mbps"
+    }
+  ],
+
+  "hosts": [
+    {
+      "name": "PC01",
+      "links": [
+        {
+          "lan to": "LAB"
+        }
+      ]
+    },
+    {
+      "name": "PC02",
+      "links": [
+        {
+          "lan to": "LAB"
+        }
+      ]
+    },
+    {
+      "name": "PC03",
+      "links": [
+        {
+          "lan to": "LAB"
+        }
+      ]
+    },
+    {
+      "name": "PC04",
+      "links": [
+        {
+          "lan to": "LAB"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,3 @@
+Time (usec),Events Raised,Messages Generated,Messages Delivered,Average Delivery Time (usec),Frames Transmitted,Frames Received,Bytes Received (Physical),Bytes Received (Application),Efficiency (AL/PL)
+10000000,20,0,0,0,0,0,0,0,1
+20000000,40,0,0,0,0,0,0,0,1
