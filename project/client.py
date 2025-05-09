@@ -146,8 +146,8 @@ def main():
             print("[INFO] Game ended.\n")
             os._exit(0) # exit the program immediately 
         except Exception as e:
-            wfile.write("QUIT\n") # write into a buffer
-            wfile.flush() # send the buffered data to the server 
+            # wfile.write("QUIT\n") # write into a buffer
+            # wfile.flush() # send the buffered data to the server 
             print(f"[ERROR] An error occurred: {e}")
             print("[INFO] Game ended.\n")
             # Handle other exceptions

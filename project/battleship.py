@@ -22,13 +22,13 @@ import select
 # ]
 
 # Testing
-BOARD_SIZE = 6
+BOARD_SIZE = 3
 SHIPS = [
     # ("Carrier", 5), # 航空母舰
     # ("Battleship", 4), #战列舰
     # ("Cruiser", 3), #巡洋舰
     ("Submarine", 3), #潜艇
-    ("Destroyer", 2) #驱逐舰
+    # ("Destroyer", 2) #驱逐舰
 ]
 
 
