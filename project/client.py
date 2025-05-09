@@ -123,7 +123,6 @@ def main():
                     wfile.flush() # send the buffered data to the server immediately
                     print('You quit the game.')
                     running = False
-                    # todo: update the server total_connections and connection_waiting_queue, server should also print a message
                 # Check for valid coordinates
                 elif spectator_mode:
                     print("You are in spectator mode. You cannot fire.")

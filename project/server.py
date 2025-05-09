@@ -154,14 +154,10 @@ def handle_client(id, conn, current_r, current_w, spectator_mode):
             # print('come on b aby')
             spectator_mode = False
             player_number = get_player_number(id)
-            # print('old rfile is same as new rfile:', current_r is current_players[player_number][2])
-            print(f'[!] player {player_number+1} current rfile:', current_r)
             current_players[player_number] = (id, conn, current_r, current_w)
-            print('[!] current_players[restored player] rfile:', current_players[player_number][2])
             game_status = "TWO PLAYERS PLAYING"
             restored = True
             cancel_reconnection_timer()
-            print('game_status:', game_status)
         else:
             print('game_status:', game_status)
             print('num current players:', len(current_players))
@@ -238,19 +234,14 @@ def handle_client(id, conn, current_r, current_w, spectator_mode):
                 break
             elif game_status == "ONE PLAYER LEFT" and id == left_player_id:
                 break
-
-            # print('current_turn:', current_turn)
-            # print('player_number:', player_number)
         
         if current_turn == player_number:
             try:
-                print(f"[GAME] Player {id}'s turn.")
+                print(f"[GAME] Player {player_number+1} with ID{id}'s turn.")
                 send(current_w, f"\nPlayer {player_number + 1}, it's your turn.")
                 with lock:
                     if left_player_id != -1:
-                        print('updating')
                         opponent_r, opponent_w = update_opponent_rwfiles(opponent_r, opponent_w, opponent_player_number)
-                    print(f'player {player_number+1} opponent_r:', opponent_r)
 
                     if game_status != "ONE PLAYER LEFT" and game_status != "FORFEITED":
                         send(opponent_w, f"\nPlayer {opponent_player_number+1}, it's your opponent's turn.")
@@ -264,8 +255,7 @@ def handle_client(id, conn, current_r, current_w, spectator_mode):
 
             try:
                 if game_status == "TWO PLAYERS PLAYING":
-
-                    print('i am here')
+                    # print('i am here')
                     ready, _, _ = select.select([current_r, opponent_r], [], [], 30)
                     if not ready:
                         send(current_w, "Timeout! You took too long.")
@@ -274,7 +264,6 @@ def handle_client(id, conn, current_r, current_w, spectator_mode):
                             current_turn = 1 - current_turn
                         continue
                 else:
-                    print('game_status:', game_status)
                     ready, _, _ = select.select([current_r, notify_forfeited_r], [], [], 30)
                     if not ready:
                         send(current_w, "Timeout! You took too long.")
@@ -289,14 +278,14 @@ def handle_client(id, conn, current_r, current_w, spectator_mode):
                 # Handle disconnect
                 if opponent_r in ready:
                     try:
-                        print(f'player {player_number+1} opponent_r:', opponent_r)
+                        # print(f'player {player_number+1} opponent_r:', opponent_r)
                         opponent_msg = opponent_r.readline()
                         if opponent_msg: 
                             opponent_msg = opponent_msg.strip()
                     except Exception as e:
                         print(f"[ERROR6] Game error: {e}")
                     if opponent_msg == 'QUIT':
-                        print(f'player {player_number+1} with player ID {id} kkkk')
+                        # print(f'player {player_number+1} with player ID {id} kkkk')
                         send(current_w, "The other player has disconnected.")
                         broadcast_to_spectators(f"Player {opponent_id} disconnected.")
                         with lock:
@@ -400,14 +389,14 @@ def handle_client(id, conn, current_r, current_w, spectator_mode):
     try:
         with lock:
             if player_number in current_players:
-                print('f1')
+                # print('f1')
                 num_player_ready -= 1
                 # print(f"Player {id} disconnected. Remaining players: {num_player_ready}")
                 if game_status == "FORFEITED":
                     send(current_w, "__FORFEITED__")  #! when calling a function, be careful if it has a lock within the function too (deadlock)
                     broadcast_to_spectators(f"Player {opponent_id} forfeited the game. Player {id} win!")
                     game_status = "OVER"
-                    print('f2')
+                    # print('f2')
                 if game_status == "OVER":
                     cancel_reconnection_timer()
                     current_players.clear()
