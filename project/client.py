@@ -68,13 +68,13 @@ def receive_messages(rfile):
         elif line == "__YOUR TURN__":
             can_fire = True
         elif line == "__GAME OVER__":
-                print("[INFO] Game ended.\n")
-                running = False
-                os._exit(0) # exit the program immediately
-        # elif line == "__CLIENT REJECTED__":
-        #     print("[INFO] The game is full at the moment. Please try again later.")
-        #     running = False
-        #     os._exit(0)
+            print("[INFO] Game ended.\n")
+            running = False
+            os._exit(0) # exit the program immediately
+        elif line == "__FORFEITED__":
+            print("The other player forfeited. You win!\n")
+            running = False
+            os._exit(0) # exit the program immediately
         elif line == "__SPECTATOR__":
             print("You are now in spectator mode. You will see updates but cannot play.")
             spectator_mode = True
