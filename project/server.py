@@ -287,16 +287,12 @@ def handle_client(id, conn, current_r, current_w, spectator_mode):
             
             try:
                 # Handle disconnect
-                print('hello')
                 if opponent_r in ready:
-                    print('????')
                     try:
                         print(f'player {player_number+1} opponent_r:', opponent_r)
                         opponent_msg = opponent_r.readline()
                         if opponent_msg: 
                             opponent_msg = opponent_msg.strip()
-                            print('opponent_msg:', opponent_msg)
-                        print('oooo')
                     except Exception as e:
                         print(f"[ERROR6] Game error: {e}")
                     if opponent_msg == 'QUIT':
@@ -306,9 +302,6 @@ def handle_client(id, conn, current_r, current_w, spectator_mode):
                         with lock:
                             game_status = "ONE PLAYER LEFT"
                             left_player_id = opponent_id
-                            # print('left_player_id:', left_player_id)
-                            # print('left_player_number', opponent_player_number+1)
-                            # game_ready_cond.notify_all()
                         start_reconnection_timer()
                         opponent_msg = None
             except Exception as e:
@@ -346,11 +339,10 @@ def handle_client(id, conn, current_r, current_w, spectator_mode):
                 if guess == 'QUIT':
                     send(opponent_w, "The other player left.")
                     # send(opponent_w, "__GAME OVER__")
+                    start_reconnection_timer()
                     with lock:
                         left_player_id = id
                         game_status = "ONE PLAYER LEFT"
-                    start_reconnection_timer()
-                    with lock:
                         current_turn = 1 - current_turn 
                     break
             except Exception as e:
