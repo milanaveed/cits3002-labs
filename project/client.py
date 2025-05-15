@@ -16,6 +16,11 @@ import hashlib
 
 ID_FILE = os.path.expanduser("~/.battleship_id")
 
+def countdown(seconds):
+    for i in range(seconds-1, 0, -1):
+        print(f'{i} seconds remaining...')
+        time.sleep(1)
+
 def get_or_create_client_id():
     tty = os.ttyname(0)  # Get terminal device, e.g., /dev/ttys000
     base_name = os.path.basename(tty)  # e.g., ttys000
@@ -44,7 +49,7 @@ running = True
 can_fire = False
 spectator_mode = False
 
-def receive_messages(rfile):
+def receive_messages(rfile, wfile):
     global running, can_fire, spectator_mode
     """Continuously receive and display messages from the server"""
     while running:
@@ -59,7 +64,7 @@ def receive_messages(rfile):
 
         if line == "GRID":
             # Begin reading board lines
-            print("\n[Board]")
+            print("[Board]")
             while True:
                 board_line = rfile.readline()
                 if not board_line or board_line.strip() == "":
@@ -78,6 +83,12 @@ def receive_messages(rfile):
         elif line == "__SPECTATOR ON__":
             print("You are now in spectator mode. You will see updates but cannot play.")
             spectator_mode = True
+        elif line == "__GAME OVER SPECTATOR__":
+            wfile.write("GAMEOVER\n") # write into a buffer
+            wfile.flush() # send the buffered data to the server 
+        elif line == "__SPECTATOR OFF__":
+            spectator_mode = False
+            print("You are a player now.")
         else:
             # Normal message
             print(line)
@@ -104,7 +115,7 @@ def main():
         wfile.flush()
 
         # Start a thread for receiving messages
-        receiver_thread = threading.Thread(target=receive_messages, args=(rfile,), daemon=True)
+        receiver_thread = threading.Thread(target=receive_messages, args=(rfile,wfile), daemon=True)
         receiver_thread.start()
 
         # Main thread handles sending user input
