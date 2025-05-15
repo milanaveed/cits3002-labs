@@ -192,12 +192,12 @@ def handle_client(id, conn, current_r, current_w, spectator_mode):
             restored = True
             cancel_reconnection_timer()
         else:
-            print('game_status:', game_status)
-            print('num current players:', len(current_players))
+            # print('game_status:', game_status)
+            # print('num current players:', len(current_players))
             connection_waiting_queue.append([id, conn, current_r, current_w])
             update_next_players()
             spectator_mode = True
-            print(f"[INFO] Player {id} is in spectator mode.")
+            print(f"[INFO] Player ID {id} is in spectator mode.")
 
     # Spectator handling
     if spectator_mode:
@@ -248,7 +248,6 @@ def handle_client(id, conn, current_r, current_w, spectator_mode):
             num_player_ready += 1
             if num_player_ready == 2:
                 game_status = "TWO PLAYERS PLAYING"
-                print(f"[GAME] Game started.")
                 game_ready_cond.notify_all()
             else:
                 print("[INFO] Waiting for 1 more player to start the game...")
@@ -272,9 +271,10 @@ def handle_client(id, conn, current_r, current_w, spectator_mode):
         send_opponent_message(opponent_w, f"Restored game with Player ID {id}.")
         broadcast_to_spectators(f"Player ID {id} restored game with Player ID {opponent_id}.")
     else:
-        send(current_w, f"Game started.")
+        send(current_w, f"Game started with opponent ID {opponent_id}.")
         if player_number == 0: # only broadcast once
             broadcast_to_spectators(f"Game started! Player ID {id} vs Player ID {opponent_id}.")
+            print(f"[GAME] Game started! Player ID {id} vs Player ID {opponent_id}.")
 
     # Game loop
     while True:
@@ -489,7 +489,7 @@ def main():
                     send(wfile, "Missing client ID. Disconnecting.")
                     conn.close()
                     continue
-                print(f"[INFO] Player {client_id} connected.")
+                print(f"[INFO] Player ID {client_id} connected.")
                 client_thread = threading.Thread(target=handle_client, args=(client_id, conn, rfile, wfile, False), daemon=True)
                 client_thread.start() 
         except KeyboardInterrupt:
