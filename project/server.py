@@ -433,40 +433,13 @@ def main():
                     send(wfile, "Missing client ID. Disconnecting.")
                     conn.close()
                     continue
-
                 print(f"[INFO] Player {client_id} connected.")
-                # with lock:
-                #     connection_waiting_queue.put((client_id, conn, rfile, wfile))
                 client_thread = threading.Thread(target=handle_client, args=(client_id, conn, rfile, wfile, False), daemon=True)
-                client_thread.start()
-                
-
-                # total_connections += 1 
-                # if num_active_players < 2:
-                #     # client_id += 1
-                #     send(conn.makefile('w'), "Connected to server. Waiting for opponent...")
-                #     print(f"[INFO] A player connected from {addr}.")
-
-                #     with lock:
-                #         if 0 in current_players:
-                #             current_players[1] = (client_id, conn, rfile, wfile)
-                #         else:
-                #             current_players[0] = (client_id, conn, rfile, wfile)
-                    
-                    
-                #     client_thread = threading.Thread(target=handle_client, args=(client_id, conn, rfile, wfile, False), daemon=True)
-                #     client_thread.start()
-                # else: # If two players are already connected
-                #     with lock:
-                #         connection_waiting_queue.put((client_id, conn, rfile, wfile))
-                #     client_thread = threading.Thread(target=handle_client, args=(client_id, conn, rfile, wfile, True), daemon=True)
-                #     client_thread.start()
-                    
+                client_thread.start() 
         except KeyboardInterrupt:
             print("\n[INFO] Server manually stopped. Shutting down.")
         except Exception as e:
             print(f"[ERROR] Unexpected server error: {e}")
-
 
 
 if __name__ == "__main__":
