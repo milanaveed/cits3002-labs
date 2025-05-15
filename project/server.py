@@ -358,21 +358,18 @@ def handle_client(id, conn, current_r, current_w, spectator_mode):
                                 broadcast_to_spectators(f"Player {id} sank all Player {opponent_id}'s ships. Game ended.\n")
                                 with lock:
                                     game_status = "OVER"
-                                    # game_ready_cond.notify_all()
                                 break
                         else:
                             msg = "HIT!"
-                            broadcast_to_spectators("Result: HIT!\n")
                     elif result == 'miss':
                         msg = "MISS!"
-                        broadcast_to_spectators("Result: MISS!\n")
                     elif result == 'already_shot':
-                        msg = "You already fired at that location."
-                        broadcast_to_spectators("Result: Already shot.\n")
+                        msg = "Already fired at that location."
                     else:
                         msg = "Unknown result."
 
                     send(current_w, msg)
+                    broadcast_to_spectators(f"Result: {msg}\n")
 
                     with lock:
                         if game_status != "ONE PLAYER LEFT":
