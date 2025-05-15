@@ -12,9 +12,7 @@ However, if you want to support multiple clients (i.e. progress through further 
 
 import socket
 import threading
-from battleship import run_double_player_game_online
 import time
-import queue
 from battleship import *
 
 HOST = '127.0.0.1'
@@ -27,7 +25,7 @@ lock = threading.Lock()
 num_player_ready = 0
 shared_boards = {}
 current_turn = 0 # 0 for player 1, 1 for player 2
-player_ids = {}  # id -> player_num
+player_ids = {}  # player_id -> player_num
 game_status = None
 RECONNECT_TIMEOUT = 1000
 left_player_id = -1
@@ -45,29 +43,29 @@ def send(wfile, msg):
     try:
         wfile.write(msg + '\n')
         wfile.flush()
-    except (BrokenPipeError, OSError):
-        print(f"[ERROR] Could not send to client {wfile}: {msg}")
+    except Exception as e:
+        print(f"[ERROR] {e}.\nCould not send to client {wfile}: {msg}")
 
-def remove_connection(id):
+def remove_connection(player_id):
     """Remove a specific connection from the connection waiting queue."""
     global connection_waiting_queue
-    connection_waiting_queue = [conn for conn in connection_waiting_queue if conn[0] != id]
+    connection_waiting_queue = [conn for conn in connection_waiting_queue if conn[0] != player_id]
 
-def get_player_number(id):
+def get_player_number(player_id):
     """Get the current player's number."""
     global current_players
     for key, value in current_players.items():
-        if value[0] == id:
+        if value[0] == player_id:
             return key
         
 def send_board(wfile, board):
-        send(wfile, "GRID")
-        send(wfile, "  " + " ".join(str(i + 1).rjust(2) for i in range(board.size)))
-        for r in range(board.size):
-            row_label = chr(ord('A') + r)
-            row_str = " ".join(board.display_grid[r][c] for c in range(board.size))
-            send(wfile, f"{row_label:2} {row_str}")
-        send(wfile, "")  # end of board
+    send(wfile, "GRID")
+    send(wfile, "  " + " ".join(str(i + 1).rjust(2) for i in range(board.size)))
+    for r in range(board.size):
+        row_label = chr(ord('A') + r)
+        row_str = " ".join(board.display_grid[r][c] for c in range(board.size))
+        send(wfile, f"{row_label:2} {row_str}")
+    send(wfile, "")  # end of board
 
 def broadcast_to_spectators(msg):
     """Send a message to all spectators."""
@@ -133,12 +131,12 @@ def countdown(seconds):
         print(f'{i} seconds remaining...')
         time.sleep(1)
 
-def is_next_player(id):
+def is_next_player(player_id):
     """Check if the current player is the next player in line."""
     global next_players_id
-    if id in next_players_id:
-        next_players_id.remove(id)
-        remove_connection(id) # remove from the waiting queue
+    if player_id in next_players_id:
+        next_players_id.remove(player_id)
+        remove_connection(player_id) # remove from the waiting queue
         return True
     else:
         return False
@@ -168,7 +166,8 @@ def send_opponent_message(opponent_w, msg):
     except Exception as e:
         print(f"[ERROR] {e}.\nCould not send to opponent {opponent_w}: {msg}")
 
-def handle_client(id, conn, current_r, current_w, spectator_mode):
+
+def handle_client(player_id, conn, current_r, current_w, spectator_mode):
     global connection_waiting_queue, current_players, num_player_ready
     global shared_boards, current_turn, game_status, left_player_id
     restored = False
@@ -180,24 +179,24 @@ def handle_client(id, conn, current_r, current_w, spectator_mode):
         if len(current_players) < 2:
             spectator_mode = False
             if 0 in current_players:
-                current_players[1] = (id, conn, current_r, current_w)
+                current_players[1] = (player_id, conn, current_r, current_w)
             else:
-                current_players[0] = (id, conn, current_r, current_w)
-        elif id == left_player_id and game_status == "ONE PLAYER LEFT":
+                current_players[0] = (player_id, conn, current_r, current_w)
+        elif player_id == left_player_id and game_status == "ONE PLAYER LEFT":
             # print('come on b aby')
             spectator_mode = False
-            player_number = get_player_number(id)
-            current_players[player_number] = (id, conn, current_r, current_w)
+            player_number = get_player_number(player_id)
+            current_players[player_number] = (player_id, conn, current_r, current_w)
             game_status = "TWO PLAYERS PLAYING"
             restored = True
             cancel_reconnection_timer()
         else:
             # print('game_status:', game_status)
             # print('num current players:', len(current_players))
-            connection_waiting_queue.append([id, conn, current_r, current_w])
+            connection_waiting_queue.append([player_id, conn, current_r, current_w])
             update_next_players()
             spectator_mode = True
-            print(f"[INFO] Player ID {id} is in spectator mode.")
+            print(f"[INFO] Player ID {player_id} is in spectator mode.")
 
     # Spectator handling
     if spectator_mode:
@@ -206,31 +205,31 @@ def handle_client(id, conn, current_r, current_w, spectator_mode):
         while spectator_mode:
             message = current_r.readline().strip()
             if message == "QUIT":
-                print(f"[INFO] Spectator with ID {id} disconnected.")
+                print(f"[INFO] Spectator with ID {player_id} disconnected.")
                 with lock:
-                    remove_connection(id)
+                    remove_connection(player_id)
                 conn.close()
                 return
             elif message == "GAMEOVER":
                 with lock:
-                    if is_next_player(id):
+                    if is_next_player(player_id):
                         spectator_mode = False
                         if 0 in current_players:
-                            current_players[1] = (id, conn, current_r, current_w)
-                            broadcast_to_spectators(f"Player ID{id} will be in the next game. Game starting in 2s.")
+                            current_players[1] = (player_id, conn, current_r, current_w)
+                            broadcast_to_spectators(f"Player ID{player_id} will be in the next game. Game starting in 2s.")
                         else:
-                            current_players[0] = (id, conn, current_r, current_w)
-                            broadcast_to_spectators(f"Player ID{id} will be in the next game. Waiting for one more player.")
+                            current_players[0] = (player_id, conn, current_r, current_w)
+                            broadcast_to_spectators(f"Player ID{player_id} will be in the next game. Waiting for one more player.")
                         send(current_w, "__SPECTATOR OFF__")
 
 
     if not restored:
         with lock:
-            player_number = get_player_number(id)
+            player_number = get_player_number(player_id)
 
 
     # print("f1")
-    send(current_w, f"Welcome back Player ID {id}!" if restored else f"Welcome Player ID {id}!")
+    send(current_w, f"Welcome back Player ID {player_id}!" if restored else f"Welcome Player ID {player_id}!")
      # Create or restore board
 
     if player_number not in shared_boards:
@@ -240,7 +239,7 @@ def handle_client(id, conn, current_r, current_w, spectator_mode):
         send(current_w, f"Your board is ready.")
         if player_number == 0:
             send(current_w, "Waiting for another player to join...")
-        print(f"[GAME] Player ID {id}'s board is ready.") 
+        print(f"[GAME] Player ID {player_id}'s board is ready.") 
 
     # Wait for both players to be ready
     if not restored:
@@ -268,26 +267,26 @@ def handle_client(id, conn, current_r, current_w, spectator_mode):
     if restored:
         print('[GAME] Restored game with opponent.')
         send(current_w, f"Restored game with Player ID {opponent_id}.")
-        send_opponent_message(opponent_w, f"Restored game with Player ID {id}.")
-        broadcast_to_spectators(f"Player ID {id} restored game with Player ID {opponent_id}.")
+        send_opponent_message(opponent_w, f"Restored game with Player ID {player_id}.")
+        broadcast_to_spectators(f"Player ID {player_id} restored game with Player ID {opponent_id}.")
     else:
         send(current_w, f"Game started with opponent ID {opponent_id}.")
         if player_number == 0: # only broadcast once
-            broadcast_to_spectators(f"Game started! Player ID {id} vs Player ID {opponent_id}.")
-            print(f"[GAME] Game started! Player ID {id} vs Player ID {opponent_id}.")
+            broadcast_to_spectators(f"Game started! Player ID {player_id} vs Player ID {opponent_id}.")
+            print(f"[GAME] Game started! Player ID {player_id} vs Player ID {opponent_id}.")
 
     # Game loop
     while True:
         with lock:
             if game_status == "FORFEITED" or game_status == "OVER":
                 break
-            elif game_status == "ONE PLAYER LEFT" and id == left_player_id:
+            elif game_status == "ONE PLAYER LEFT" and player_id == left_player_id:
                 break
         
         if current_turn == player_number:
             try:
-                print(f"[GAME] Player ID {id}'s turn.")
-                send(current_w, f"\nPlayer ID {id}, it's your turn.")
+                print(f"[GAME] Player ID {player_id}'s turn.")
+                send(current_w, f"\nPlayer ID {player_id}, it's your turn.")
                 with lock:
                     if left_player_id != -1:
                         opponent_r, opponent_w = update_opponent_rwfiles(opponent_r, opponent_w, opponent_player_number)
@@ -337,7 +336,7 @@ def handle_client(id, conn, current_r, current_w, spectator_mode):
                     except Exception as e:
                         print(f"[ERROR6] Game error: {e}")
                     if opponent_msg == 'QUIT':
-                        # print(f'player {player_number+1} with player ID {id} kkkk')
+                        # print(f'player {player_number+1} with player ID {player_id} kkkk')
                         send(current_w, "The other player has disconnected.")
                         broadcast_to_spectators(f"Player ID {opponent_id} disconnected.")
                         with lock:
@@ -368,7 +367,7 @@ def handle_client(id, conn, current_r, current_w, spectator_mode):
                     send(current_w, "Connection lost.")
                     send_opponent_message(opponent_w, "The other player has disconnected.")
                     with lock:
-                        left_player_id = id
+                        left_player_id = player_id
                         game_status = "ONE PLAYER LEFT"
                     start_reconnection_timer()
                     with lock:
@@ -384,7 +383,7 @@ def handle_client(id, conn, current_r, current_w, spectator_mode):
                     send_opponent_message(opponent_w, "The other player left.")
                     start_reconnection_timer()
                     with lock:
-                        left_player_id = id
+                        left_player_id = player_id
                         game_status = "ONE PLAYER LEFT"
                         current_turn = 1 - current_turn 
                     break
@@ -397,19 +396,19 @@ def handle_client(id, conn, current_r, current_w, spectator_mode):
                     row, col = parse_coordinate(guess)
                     result, sunk_ship = opponent_board.fire_at(row, col)
                     shared_boards[opponent_player_number] = opponent_board
-                    broadcast_board_to_spectators(opponent_board, f"\nPlayer ID {id} fired Player ID {opponent_id} at {guess}.")
+                    broadcast_board_to_spectators(opponent_board, f"\nPlayer ID {player_id} fired Player ID {opponent_id} at {guess}.")
 
                     if result == 'hit':
                         if sunk_ship:
                             msg = f"HIT! You sank the {sunk_ship}!"
-                            broadcast_to_spectators(f"Result: HIT! Player ID {id} sank the {sunk_ship}.\n")
+                            broadcast_to_spectators(f"Result: HIT! Player ID {player_id} sank the {sunk_ship}.\n")
                             if opponent_board.all_ships_sunk():
                                 send(current_w, "\nCongratulations! You sank all opponent's ships.")
                                 send_board(current_w, opponent_board)
                                 send(current_w, "__GAME OVER__")
                                 send_opponent_message(opponent_w, "\nYou lose. All your ships have been sunk.")
                                 send_opponent_message(opponent_w, "__GAME OVER__")
-                                broadcast_to_spectators(f"Player ID {id} sank all Player ID {opponent_id}'s ships. Game ended.\n")
+                                broadcast_to_spectators(f"Player ID {player_id} sank all Player ID {opponent_id}'s ships. Game ended.\n")
                                 with lock:
                                     game_status = "OVER"
                                 break
@@ -442,10 +441,10 @@ def handle_client(id, conn, current_r, current_w, spectator_mode):
             if player_number in current_players:
                 # print('f1')
                 num_player_ready -= 1
-                # print(f"Player {id} disconnected. Remaining players: {num_player_ready}")
+                # print(f"Player {player_id} disconnected. Remaining players: {num_player_ready}")
                 if game_status == "FORFEITED":
                     send(current_w, "__FORFEITED__")  #! when calling a function, be careful if it has a lock within the function too (deadlock)
-                    broadcast_to_spectators(f"Player ID {opponent_id} forfeited the game. Player ID {id} win!")
+                    broadcast_to_spectators(f"Player ID {opponent_id} forfeited the game. Player ID {player_id} win!")
                     game_status = "OVER"
                     # print('f2')
                 if game_status == "OVER":
@@ -464,7 +463,7 @@ def handle_client(id, conn, current_r, current_w, spectator_mode):
     current_r.close()
     current_w.close()
     conn.close()
-    # print(f"[INFO] Game session ended for player ID {id}.")
+    # print(f"[INFO] Game session ended for player ID {player_id}.")
 
 
 def main():

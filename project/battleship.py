@@ -244,6 +244,287 @@ class Board:
             print(f"{row_label:2} {row_str}")
 
 
+class PlayerSession:
+    def __init__(self, id, conn, rfile, wfile, spectator_mode):
+        self.id = id
+        self.conn = conn
+        self.rfile = rfile
+        self.wfile = wfile
+        self.spectator_mode = spectator_mode
+        self.restored = False
+        self.player_number = None
+        self.opponent_number = None
+        self.opponent_id = None
+        self.opponent_r = None
+        self.opponent_w = None
+        self.board = None
+        self.opponent_board = None
+
+    def run(self):
+        self.initialize_connection()
+
+        if self.spectator_mode:
+            self.handle_spectator()
+            return
+
+        self.setup_player()
+        self.wait_for_game_start()
+        self.identify_opponent()
+        self.notify_game_start()
+        self.game_loop()
+        self.cleanup()
+
+    def initialize_connection(self):
+        global current_players, connection_waiting_queue, left_player_id, game_status
+
+        with lock:
+            if len(current_players) < 2:
+                self.spectator_mode = False
+                self.player_number = 1 if 0 in current_players else 0
+                current_players[self.player_number] = (self.id, self.conn, self.rfile, self.wfile)
+            elif self.id == left_player_id and game_status == "ONE PLAYER LEFT":
+                self.spectator_mode = False
+                self.player_number = get_player_number(self.id)
+                current_players[self.player_number] = (self.id, self.conn, self.rfile, self.wfile)
+                game_status = "TWO PLAYERS PLAYING"
+                self.restored = True
+                cancel_reconnection_timer()
+            else:
+                connection_waiting_queue.append([self.id, self.conn, self.rfile, self.wfile])
+                update_next_players()
+                self.spectator_mode = True
+                print(f"[INFO] Player ID {self.id} is in spectator mode.")
+
+    def handle_spectator(self):
+        send(self.wfile, "Connected to server. Currently in the waiting lobby...")
+        send(self.wfile, "__SPECTATOR ON__")
+        while self.spectator_mode:
+            message = self.rfile.readline().strip()
+            if message == "QUIT":
+                print(f"[INFO] Spectator with ID {self.id} disconnected.")
+                with lock:
+                    remove_connection(self.id)
+                self.conn.close()
+                return
+            elif message == "GAMEOVER":
+                with lock:
+                    if is_next_player(self.id):
+                        self.spectator_mode = False
+                        if 0 in current_players:
+                            self.player_number = 1
+                        else:
+                            self.player_number = 0
+                        current_players[self.player_number] = (self.id, self.conn, self.rfile, self.wfile)
+                        msg = f"Player ID{self.id} will be in the next game. Game starting in 2s." if self.player_number == 1 else f"Player ID{self.id} will be in the next game. Waiting for one more player."
+                        broadcast_to_spectators(msg)
+                        send(self.wfile, "__SPECTATOR OFF__")
+
+    def setup_player(self):
+        global shared_boards
+
+        send(self.wfile, f"Welcome back Player ID {self.id}!" if self.restored else f"Welcome Player ID {self.id}!")
+
+        if self.player_number not in shared_boards:
+            self.board = Board()
+            self.board.place_ships_randomly()
+            shared_boards[self.player_number] = self.board
+            send(self.wfile, "Your board is ready.")
+            if self.player_number == 0:
+                send(self.wfile, "Waiting for another player to join...")
+            print(f"[GAME] Player ID {self.id}'s board is ready.")
+        else:
+            self.board = shared_boards[self.player_number]
+
+    def wait_for_game_start(self):
+        global num_player_ready, game_status
+
+        if not self.restored:
+            with game_ready_cond:
+                num_player_ready += 1
+                if num_player_ready == 2:
+                    game_status = "TWO PLAYERS PLAYING"
+                    game_ready_cond.notify_all()
+                else:
+                    print("[INFO] Waiting for 1 more player to start the game...")
+                    game_ready_cond.wait()
+        else:
+            num_player_ready = 2
+
+    def identify_opponent(self):
+        self.opponent_number = 1 - self.player_number
+        while True:
+            with lock:
+                if self.opponent_number in current_players:
+                    self.opponent_r, self.opponent_w, self.opponent_id = get_opponent_info(self.opponent_number)
+                    self.opponent_board = shared_boards[self.opponent_number]
+                    break
+
+    def notify_game_start(self):
+        if self.restored:
+            print('[GAME] Restored game with opponent.')
+            send(self.wfile, f"Restored game with Player ID {self.opponent_id}.")
+            send_opponent_message(self.opponent_w, f"Restored game with Player ID {self.id}.")
+            broadcast_to_spectators(f"Player ID {self.id} restored game with Player ID {self.opponent_id}.")
+        else:
+            send(self.wfile, f"Game started with opponent ID {self.opponent_id}.")
+            if self.player_number == 0:
+                broadcast_to_spectators(f"Game started! Player ID {self.id} vs Player ID {self.opponent_id}.")
+                print(f"[GAME] Game started! Player ID {self.id} vs Player ID {self.opponent_id}.")
+
+    def game_loop(self):
+        global game_status, current_turn, left_player_id
+
+        while True:
+            with lock:
+                if game_status in ["FORFEITED", "OVER"]:
+                    break
+                if game_status == "ONE PLAYER LEFT" and self.id == left_player_id:
+                    break
+
+            if current_turn == self.player_number:
+                try:
+                    self.play_turn()
+                except Exception as e:
+                    print(f"[ERROR] Game error: {e}")
+                    break
+
+    def play_turn(self):
+        global current_turn, game_status, left_player_id
+
+        send(self.wfile, f"\nPlayer ID {self.id}, it's your turn.")
+        with lock:
+            if left_player_id != -1:
+                self.opponent_r, self.opponent_w = update_opponent_rwfiles(self.opponent_r, self.opponent_w, self.opponent_number)
+
+            if game_status not in ["ONE PLAYER LEFT", "FORFEITED"]:
+                send_opponent_message(self.opponent_w, f"\nPlayer ID {self.opponent_id}, it's your opponent's turn.")
+
+        send_board(self.wfile, self.opponent_board)
+        send(self.wfile, "__YOUR TURN__")
+        send(self.wfile, "Enter coordinate to fire at (e.g. B5):")
+
+        ready, _, _ = select.select([self.rfile, self.opponent_r if game_status == "TWO PLAYERS PLAYING" else notify_forfeited_r], [], [], 30)
+        if not ready:
+            send(self.wfile, "Timeout! You took too long.")
+            if game_status == "TWO PLAYERS PLAYING":
+                send_opponent_message(self.opponent_w, "The other player timed out.")
+                with lock:
+                    current_turn = 1 - current_turn
+            else:
+                send(self.wfile, "It's your opponent's turn.")
+                time.sleep(5)
+            return
+
+        if game_status == "TWO PLAYERS PLAYING" and self.opponent_r in ready:
+            opponent_msg = self.opponent_r.readline().strip()
+            if opponent_msg == 'QUIT':
+                send(self.wfile, "The other player has disconnected.")
+                broadcast_to_spectators(f"Player ID {self.opponent_id} disconnected.")
+                with lock:
+                    game_status = "ONE PLAYER LEFT"
+                    left_player_id = self.opponent_id
+                start_reconnection_timer()
+                return
+
+        if notify_forfeited_r in ready:
+            notify_forfeited_r.recv(1024)
+            with lock:
+                if game_status == "FORFEITED":
+                    return
+
+        guess = self.rfile.readline()
+        if not guess:
+            send(self.wfile, "Connection lost.")
+            send_opponent_message(self.opponent_w, "The other player has disconnected.")
+            with lock:
+                left_player_id = self.id
+                game_status = "ONE PLAYER LEFT"
+            start_reconnection_timer()
+            with lock:
+                current_turn = 1 - current_turn
+            return
+
+        guess = guess.strip()
+        if guess == 'QUIT':
+            send_opponent_message(self.opponent_w, "The other player left.")
+            start_reconnection_timer()
+            with lock:
+                left_player_id = self.id
+                game_status = "ONE PLAYER LEFT"
+                current_turn = 1 - current_turn
+            return
+
+        if 'FIRE' in guess:
+            self.process_fire(guess.split(' ')[1])
+
+    def process_fire(self, coord):
+        global shared_boards, current_turn, game_status
+
+        row, col = parse_coordinate(coord)
+        result, sunk_ship = self.opponent_board.fire_at(row, col)
+        shared_boards[self.opponent_number] = self.opponent_board
+        broadcast_board_to_spectators(self.opponent_board, f"\nPlayer ID {self.id} fired Player ID {self.opponent_id} at {coord}.")
+
+        if result == 'hit':
+            if sunk_ship:
+                msg = f"HIT! You sank the {sunk_ship}!"
+                broadcast_to_spectators(f"Result: HIT! Player ID {self.id} sank the {sunk_ship}.\n")
+                if self.opponent_board.all_ships_sunk():
+                    send(self.wfile, "\nCongratulations! You sank all opponent's ships.")
+                    send_board(self.wfile, self.opponent_board)
+                    send(self.wfile, "__GAME OVER__")
+                    send_opponent_message(self.opponent_w, "\nYou lose. All your ships have been sunk.")
+                    send_opponent_message(self.opponent_w, "__GAME OVER__")
+                    broadcast_to_spectators(f"Player ID {self.id} sank all Player ID {self.opponent_id}'s ships. Game ended.\n")
+                    with lock:
+                        game_status = "OVER"
+                    return
+            else:
+                msg = "HIT!"
+        elif result == 'miss':
+            msg = "MISS!"
+        elif result == 'already_shot':
+            msg = "Already fired at that location."
+        else:
+            msg = "Unknown result."
+
+        send(self.wfile, msg)
+        broadcast_to_spectators(f"Result: {msg}\n")
+
+        with lock:
+            if game_status != "ONE PLAYER LEFT":
+                current_turn = 1 - current_turn
+
+    def cleanup(self):
+        global current_players, shared_boards, num_player_ready, left_player_id
+
+        try:
+            with lock:
+                if self.player_number in current_players:
+                    num_player_ready -= 1
+                    if game_status == "FORFEITED":
+                        send(self.wfile, "__FORFEITED__")
+                        broadcast_to_spectators(f"Player ID {self.opponent_id} forfeited the game. Player ID {self.id} win!")
+                        game_status = "OVER"
+                    if game_status == "OVER":
+                        cancel_reconnection_timer()
+                        current_players.clear()
+                        shared_boards.clear()
+                        left_player_id = -1
+                        num_player_ready = 0
+                        update_next_players()
+                        broadcast_to_spectators("__GAME OVER SPECTATOR__")
+                        print('[GAME] Game over.')
+        except Exception as e:
+            print(f"[ERROR] Error while closing connection: {e}")
+        finally:
+            self.rfile.close()
+            self.wfile.close()
+            self.conn.close()
+
+
+    
+
 def parse_coordinate(coord_str):
     """
     Convert something like 'B5' into zero-based (row, col).
@@ -309,185 +590,6 @@ def run_single_player_game_locally():
             print("  >> Invalid input:", e)
 
 
-def run_single_player_game_online(rfile, wfile):
-    """
-    A test harness for running the single-player game with I/O redirected to socket file objects.
-    Expects:
-      - rfile: file-like object to .readline() from client
-      - wfile: file-like object to .write() back to client
-    
-    #####
-    NOTE: This function is (intentionally) currently somewhat "broken", which will be evident if you try and play the game via server/client.
-    You can use this as a starting point, or write your own.
-    #####
-    """
-    def send(msg):
-        wfile.write(msg + '\n')
-        wfile.flush()
-
-    def send_board(board):
-        wfile.write("GRID\n")
-        wfile.write("  " + " ".join(str(i + 1).rjust(2) for i in range(board.size)) + '\n')
-        for r in range(board.size):
-            row_label = chr(ord('A') + r)
-            row_str = " ".join(board.display_grid[r][c] for c in range(board.size))
-            wfile.write(f"{row_label:2} {row_str}\n")
-        wfile.write('\n')
-        wfile.flush()
-
-    def recv():
-        return rfile.readline().strip()
-
-    board = Board(BOARD_SIZE)
-    board.place_ships_randomly(SHIPS)
-
-    send("Welcome to Online Single-Player Battleship! Try to sink all the ships. Type 'quit' to exit.")
-
-    moves = 0
-    while True:
-        send_board(board)
-        send("Enter coordinate to fire at (e.g. B5):")
-        guess = recv()
-        if guess.lower() == 'quit':
-            send("Thanks for playing. Goodbye.")
-            return
-
-        try:
-            row, col = parse_coordinate(guess)
-            result, sunk_name = board.fire_at(row, col)
-            moves += 1
-
-            if result == 'hit':
-                if sunk_name:
-                    send(f"HIT! You sank the {sunk_name}!")
-                    if board.all_ships_sunk():
-                        send_board(board)
-                        send(f"Congratulations! You sank all ships in {moves} moves.")
-                        return
-                else:
-                    send("HIT!")
-            elif result == 'miss':
-                send("MISS!")
-            elif result == 'already_shot':
-                send("You've already fired at that location.")
-        except ValueError as e:
-            send(f"Invalid input: {e}")
-
-
-def run_double_player_game_online(p1_r, p1_w, p2_r, p2_w):
-    """
-    Runs a 2-player Battleship game between two clients.
-
-    p1_r, p1_w: reader/writer for player 1
-    p2_r, p2_w: reader/writer for player 2
-
-    #todo: upgrade to place ship manually 
-    """
-
-    def send(wfile, msg):
-        wfile.write(msg + '\n')
-        wfile.flush()
-
-    def send_board(wfile, board):
-        send(wfile, "GRID")
-        send(wfile, "  " + " ".join(str(i + 1).rjust(2) for i in range(board.size)))
-        for r in range(board.size):
-            row_label = chr(ord('A') + r)
-            row_str = " ".join(board.display_grid[r][c] for c in range(board.size))
-            send(wfile, f"{row_label:2} {row_str}")
-        send(wfile, "")  # end of board
-
-    def send_opponent_msg(current_turn, msg):
-        send(players[1 - current_turn][1], msg)
-
-    # Setup boards
-    p1_board = Board()
-    p2_board = Board()
-    p1_board.place_ships_randomly()
-    p2_board.place_ships_randomly()
-
-    # Initial welcome
-    send(p1_w, "Welcome Player 1! You are playing against Player 2.")
-    send(p2_w, "Welcome Player 2! You are playing against Player 1.")
-
-    players = [(p1_r, p1_w, p2_board, "Player 1"), (p2_r, p2_w, p1_board, "Player 2")]
-    turn = 0
-
-    while True:
-        current_r, current_w, opponent_board, player_name = players[turn]
-        opponent_r = players[1 - turn][0]
-        opponent_w = players[1 - turn][1]
-        send(current_w, f"\n{player_name}, it's your turn.")
-        send_board(current_w, opponent_board)
-
-        send(current_w, "__YOUR TURN__")
-        send(current_w, "Enter coordinate to fire at (e.g. B5):")
-
-        # wait for input with a timeout
-        ready, _, _ = select.select([current_r, opponent_r], [], [], 30) # wait for input for 30 seconds
-        if not ready:
-            send(current_w, "Timeout! You took too long to respond. It's now the other player's turn.")
-            send_opponent_msg(turn, "The other player took too long to respond.")
-            turn = 1 - turn  # Switch turns
-            continue
-        
-        if opponent_r in ready:
-            opponent_msg = opponent_r.readline().strip()
-            if opponent_msg == 'QUIT':
-                send(current_w, "The other player has disconnected and forfeited.")
-                send(current_w, "__GAME OVER__")
-                break
-        
-        guess = current_r.readline()
-        # if not guess:
-        #     send(current_w, "Connection lost. Ending game.")
-        #     send(current_w, "__GAME OVER__")
-        #     send_opponent_msg(turn, "The other player has forfeited.")
-        #     send_opponent_msg(turn, "__GAME OVER__")
-        #     break
-        guess = guess.strip()
-        if guess == 'QUIT':
-            send_opponent_msg(turn, "The other player has forfeited the game.")
-            send_opponent_msg(turn, "__GAME OVER__")
-            break
-        elif 'FIRE' in guess:
-            guess = guess.split(' ')[1]
-            try:
-                row, col = parse_coordinate(guess)
-                result, sunk_ship = opponent_board.fire_at(row, col)
-
-                if result == 'hit':
-                    if sunk_ship:
-                        msg = f"HIT! You sank the {sunk_ship}!"
-                        if opponent_board.all_ships_sunk():
-                            send(current_w, "\nCongratulations! You sank all opponent's ships.")
-                            send_board(current_w, opponent_board)
-                            send(current_w, "__GAME OVER__")
-                            
-                            send_opponent_msg(turn,  msg="\nYou lose. All your ships have been sunk.")
-                            send_opponent_msg(turn, "__GAME OVER__")
-                            break
-                    else:
-                        msg = "HIT!"
-                elif result == 'miss':
-                    msg = "MISS!"
-                elif result == 'already_shot':
-                    msg = "You already fired at that location."
-                else:
-                    # In principle, this should not happen
-                    msg = "Unknown result."
-
-                send(current_w, msg)
-
-                turn = 1 - turn  # Switch turns
-
-            except Exception as e:
-                send(current_w, f"Invalid input: {e}")
-                continue
-
-    # Close both writers after game ends
-    p1_w.close()
-    p2_w.close()
 
 
 if __name__ == "__main__":
