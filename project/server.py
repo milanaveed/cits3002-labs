@@ -27,7 +27,7 @@ shared_boards = {}
 current_turn = 0 # 0 for player 1, 1 for player 2
 player_ids = {}  # player_id -> player_num
 game_status = None
-RECONNECT_TIMEOUT = 1000
+RECONNECT_TIMEOUT = 30
 left_player_id = -1
 next_players_id = []
 timer = None
@@ -464,6 +464,11 @@ def handle_client(player_id, conn, current_r, current_w, spectator_mode):
     current_w.close()
     conn.close()
     # print(f"[INFO] Game session ended for player ID {player_id}.")
+
+
+def handle_client(player_id, conn, current_r, current_w, spectator_mode):
+    player = PlayerSession(player_id, conn, current_r, current_w, spectator_mode)
+    player.run()
 
 
 def main():
