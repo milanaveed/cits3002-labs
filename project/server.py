@@ -167,7 +167,7 @@ def handle_client(id, conn, current_r, current_w, spectator_mode):
     # Spectator handling
     if spectator_mode:
         send(current_w, "Connected to server. Currently in the waiting lobby...")
-        send(current_w, "__SPECTATOR__")
+        send(current_w, "__SPECTATOR ON__")
         while spectator_mode: #todo: when GAME OVER OR FORFEITED, check if this is going to be the next player, delay new game start in 5s, also need to send(current_w, "__PLAYER__") to cancel spectator mode
             message = current_r.readline().strip()
             if message == "QUIT":

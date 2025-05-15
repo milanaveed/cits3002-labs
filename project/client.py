@@ -75,7 +75,7 @@ def receive_messages(rfile):
             print("The other player forfeited. You win!\n")
             running = False
             os._exit(0) # exit the program immediately
-        elif line == "__SPECTATOR__":
+        elif line == "__SPECTATOR ON__":
             print("You are now in spectator mode. You will see updates but cannot play.")
             spectator_mode = True
         else:
