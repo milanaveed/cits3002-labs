@@ -174,12 +174,12 @@ def get_opponent_info(opponent_player_number):
 ###############################Start of PlayerSession Class############################
 
 class PlayerSession:
-    def __init__(self, player_id, conn, rfile, wfile, spectator_mode):
+    def __init__(self, player_id, conn, rfile, wfile):
         self.id = player_id
         self.conn = conn
         self.rfile = rfile
         self.wfile = wfile
-        self.spectator_mode = spectator_mode
+        self.spectator_mode = False
         self.restored = False
         self.player_number = None
         self.opponent_number = None
@@ -214,7 +214,7 @@ class PlayerSession:
             if not self.opponent_w.closed:
                 send(self.opponent_w, msg)
             else:
-                print(f"[ERROR] Opponent socket is closed. Cannot send message: {msg}")
+                print(f"Opponent socket is closed. Cannot send message: {msg}")
         except Exception as e:
             print(f"[ERROR] {e}.\nCould not send to opponent {self.opponent_w}: {msg}")
 
@@ -232,11 +232,9 @@ class PlayerSession:
         global current_players, connection_waiting_queue, left_player_id, game_status
         with lock:
             if len(current_players) < 2:
-                self.spectator_mode = False
                 self.player_number = 1 if 0 in current_players else 0
                 current_players[self.player_number] = (self.id, self.conn, self.rfile, self.wfile)
             elif self.id == left_player_id and game_status == "ONE PLAYER LEFT":
-                self.spectator_mode = False
                 self.player_number = get_player_number(self.id)
                 current_players[self.player_number] = (self.id, self.conn, self.rfile, self.wfile)
                 game_status = "TWO PLAYERS PLAYING"
@@ -409,12 +407,17 @@ class PlayerSession:
 
         guess = guess.strip()
         if guess == 'QUIT':
-            self.send_opponent_message("The other player left.")
-            start_reconnection_timer()
             with lock:
-                left_player_id = self.id
-                game_status = "ONE PLAYER LEFT"
-                current_turn = 1 - current_turn
+                if game_status != "ONE PLAYER LEFT":
+                    self.send_opponent_message("The other player left.")
+                    start_reconnection_timer()
+                    left_player_id = self.id
+                    game_status = "ONE PLAYER LEFT"
+                    current_turn = 1 - current_turn
+                elif game_status == "ONE PLAYER LEFT":
+                    game_status = "OVER"
+                    broadcast_to_spectators(f'Both players left. Game ended.\n')
+                    print('[GAME] Both players left.')
             return 1
 
         if 'FIRE' in guess:
