@@ -1,7 +1,7 @@
 """
 client.py
 
-Connects to a Battleship server which runs the single-player game.
+Connects to a Battleship server which runs the game.
 Simply pipes user input to the server, and prints all server responses.
 """
 import os
@@ -9,39 +9,11 @@ import socket
 import threading
 import re
 import time
-
-import os
-import uuid
 import hashlib
+import uuid
+import platform
+from pathlib import Path
 from battleship import BOARD_SIZE
-
-ID_FILE = os.path.expanduser("~/.battleship_id")
-
-def countdown(seconds):
-    for i in range(seconds-1, 0, -1):
-        print(f'{i} seconds remaining...')
-        time.sleep(1)
-
-def get_or_create_client_id():
-    tty = os.ttyname(0)  # Get terminal device, e.g., /dev/ttys000
-    base_name = os.path.basename(tty)  # e.g., ttys000
-
-    id_file = f"/tmp/battleship_client_id_{base_name}"
-
-    if not os.path.exists(id_file):
-        # Generate a unique 3-digit ID and store it
-        random_bytes = os.urandom(4)
-        hashed = hashlib.sha256(random_bytes).hexdigest()
-        short_id = int(hashed, 16) % 1000
-        with open(id_file, "w") as f:
-            f.write(str(short_id))
-    else:
-        with open(id_file, "r") as f:
-            short_id = int(f.read().strip())
-
-    return short_id
-
-client_id = get_or_create_client_id()
 
 HOST = '127.0.0.1'
 PORT = 5050
@@ -49,6 +21,50 @@ PORT = 5050
 running = True
 can_fire = False
 spectator_mode = False
+
+def countdown(seconds):
+    for i in range(seconds-1, 0, -1):
+        print(f'{i} seconds remaining...')
+        time.sleep(1)
+
+def get_or_create_client_id():
+    """Generate a unique consistent 3-digit ID for each terminal. This is for recognising the same client when reconnecting. Only cover Windows and MacOS."""
+    if platform.system() == "Darwin": # MacOS
+        tty = os.ttyname(0)  # Get terminal device, e.g., /dev/ttys000
+        base_name = os.path.basename(tty)  # e.g., ttys000
+        id_file = f"/tmp/battleship_client_id_{base_name}"
+
+        if not os.path.exists(id_file):
+            # Generate a unique 3-digit ID identifying that terminal session and store it
+            random_bytes = os.urandom(4)
+            hashed = hashlib.sha256(random_bytes).hexdigest()
+            short_id = int(hashed, 16) % 1000
+            with open(id_file, "w") as f:
+                f.write(str(short_id))
+        else:
+            with open(id_file, "r") as f:
+                short_id = int(f.read().strip())
+
+    elif platform.system() =="Windows":
+        home = Path.home()
+        id_file = home / ".battleship_id"
+
+        if not id_file.exists():
+            # Generate a random UUID and hash to 3-digit ID
+            random_uuid = uuid.uuid4().hex
+            hashed = hashlib.sha256(random_uuid.encode()).hexdigest()
+            short_id = int(hashed, 16) % 1000
+            with open(id_file, "w") as f:
+                f.write(str(short_id))
+        else:
+            with open(id_file, "r") as f:
+                short_id = int(f.read().strip())
+
+    return short_id
+
+
+client_id = get_or_create_client_id()
+
 
 def receive_messages(rfile, wfile):
     global running, can_fire, spectator_mode
@@ -160,19 +176,16 @@ def main():
             print("[INFO] Game ended.\n")
             os._exit(0) # exit the program immediately 
         except Exception as e:
-            # wfile.write("QUIT\n") # write into a buffer
-            # wfile.flush() # send the buffered data to the server 
             print(f"[ERROR] An error occurred: {e}")
             print("[INFO] Game ended.\n")
-            # Handle other exceptions
             os._exit(0)
         finally: # Always run this block even if another kind of error occurs (eg. broken pipe, socket error)
             print("[INFO] Game ended.\n")
             running = False
+            wfile.close() # close the write file
+            rfile.close()
+            s.close()
             os._exit(0) # exit the program immediately  
-            # wfile.close() # close the write file
-            # rfile.close()
-            # s.close()
 
 if __name__ == "__main__":
     main()
