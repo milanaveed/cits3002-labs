@@ -13,6 +13,7 @@ import time
 import os
 import uuid
 import hashlib
+from battleship import BOARD_SIZE
 
 ID_FILE = os.path.expanduser("~/.battleship_id")
 
@@ -93,8 +94,11 @@ def receive_messages(rfile, wfile):
             # Normal message
             print(line)
 
+
 def is_valid_coordinate(coord):
-    """Check if input like 'A1', 'B10' is valid (A-J, 1-10)"""
+    """Check if input like 'A1', 'B10' is valid (A-J, 1-10)
+    returns True if valid, False otherwise
+    """
     return re.fullmatch(r"[A-Ja-j](10|[1-9])", coord.strip()) is not None
 
 

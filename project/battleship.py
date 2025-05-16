@@ -73,6 +73,7 @@ def get_player_number(player_id):
             return key
         
 def send_board(wfile, board):
+    """Send the board state to the player."""
     send(wfile, "GRID")
     send(wfile, "  " + " ".join(str(i + 1).rjust(2) for i in range(board.size)))
     for r in range(board.size):
@@ -131,14 +132,13 @@ def cancel_reconnection_timer():
         timer.cancel()
         print("[TIMER] Reconnection timer cancelled.")
 
-def update_opponent_rwfiles(opponent_r, opponent_w, opponent_number):
-    """Update the read and write files of the opponent."""
-    global current_players
-    if opponent_number in current_players:
-        return current_players[opponent_number][2], current_players[opponent_number][3]
-        # print(f"[INFO] Updated opponent's read/write files for Player {opponent_number}.")
-    else:
-        print(f"[ERROR] Opponent ID {opponent_number} not found in current players.")
+# def update_opponent_rwfiles(opponent_r, opponent_w, opponent_number):
+#     """Update the read and write files of the opponent."""
+#     global current_players
+#     if opponent_number in current_players:
+#         return current_players[opponent_number][2], current_players[opponent_number][3]
+#     else:
+#         print(f"[ERROR] Opponent ID {opponent_number} not found in current players.")
 
 def countdown(seconds):
     for i in range(seconds, 0, -1):
@@ -164,11 +164,6 @@ def update_next_players():
         next_players_id = [connection_waiting_queue[0][0]]
     else:
         next_players_id = [connection_waiting_queue[0][0], connection_waiting_queue[1][0]]
-
-def get_opponent_info(opponent_player_number):
-    """Get the opponent's read/write files and ID."""
-    global current_players
-    return current_players[opponent_player_number][2], current_players[opponent_player_number][3], current_players[opponent_player_number][0]
 
 
 ###############################Start of PlayerSession Class############################
@@ -300,12 +295,14 @@ class PlayerSession:
             num_player_ready = 2
 
     def _identify_opponent(self):
+        """Get the opponent's read/write files, ID and board."""
+        global current_players, shared_boards
         self.opponent_number = 1 - self.player_number
         while True:
             with lock:
                 if self.opponent_number in current_players:
-                    self.opponent_r, self.opponent_w, self.opponent_id = get_opponent_info(self.opponent_number)
-                    self.opponent_board = shared_boards[self.opponent_number] #? 需要移下去吗？
+                    self.opponent_r, self.opponent_w, self.opponent_id = current_players[self.opponent_number][2], current_players[self.opponent_number][3], current_players[self.opponent_number][0]
+                    self.opponent_board = shared_boards[self.opponent_number]
                     break
 
     def _notify_game_start(self):
@@ -332,27 +329,32 @@ class PlayerSession:
 
             if current_turn == self.player_number:
                 try:
-                    if self._play_turn() == 1: #todo: check this function game_looop
+                    if self._play_turn() == 1:
                         break
                 except Exception as e:
                     print(f"[ERROR] Game error: {e}")
                     break
 
-    def _play_turn(self):
+    def _notify_player_turn(self):
+        """Notify the players about current turn."""
         global current_turn, game_status, left_player_id
 
         print(f"[GAME] Player ID {self.id}'s turn.")
         self.send_message(f"\nPlayer ID {self.id}, it's your turn.")
-        with lock:
-            if left_player_id != -1:
-                self.opponent_r, self.opponent_w = update_opponent_rwfiles(self.opponent_r, self.opponent_w, self.opponent_number)
+        self._update_opponent_rwfiles()
 
+        with lock:
             if game_status not in ["ONE PLAYER LEFT", "FORFEITED"]:
                 self.send_opponent_message(f"\nPlayer ID {self.opponent_id}, it's your opponent's turn.")
 
         send_board(self.wfile, self.opponent_board)
         self.send_message("__YOUR TURN__")
         self.send_message("Enter coordinate to fire at (e.g. B5):")
+
+    def _play_turn(self):
+        global current_turn, game_status, left_player_id
+
+        self._notify_player_turn()
 
         if game_status == "TWO PLAYERS PLAYING":
             self._update_opponent_rwfiles()
