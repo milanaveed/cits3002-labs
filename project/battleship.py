@@ -132,14 +132,6 @@ def cancel_reconnection_timer():
         timer.cancel()
         print("[TIMER] Reconnection timer cancelled.")
 
-# def update_opponent_rwfiles(opponent_r, opponent_w, opponent_number):
-#     """Update the read and write files of the opponent."""
-#     global current_players
-#     if opponent_number in current_players:
-#         return current_players[opponent_number][2], current_players[opponent_number][3]
-#     else:
-#         print(f"[ERROR] Opponent ID {opponent_number} not found in current players.")
-
 def countdown(seconds):
     for i in range(seconds, 0, -1):
         print(f'{i} seconds remaining...')
@@ -185,6 +177,7 @@ class PlayerSession:
         self.opponent_board = None
 
     def run(self):
+        """Main loop for the player session."""
         self._initialise_connection()
 
         if self.spectator_mode:
@@ -224,6 +217,9 @@ class PlayerSession:
                     print(f"[ERROR] Opponent ID {self.opponent_number} not found in current players.")
 
     def _initialise_connection(self):
+        """
+        Check if the player is a new player or a reconnection. Check if the player is an active player or a spectator.
+        """
         global current_players, connection_waiting_queue, left_player_id, game_status
         with lock:
             if len(current_players) < 2:
@@ -242,6 +238,7 @@ class PlayerSession:
                 print(f"[INFO] Player ID {self.id} is in spectator mode.")
 
     def _handle_spectator(self):
+        """Handle the spectator mode."""
         self.send_message("Connected to server. Currently in the waiting lobby...")
         self.send_message("__SPECTATOR ON__")
         while self.spectator_mode:
@@ -264,6 +261,7 @@ class PlayerSession:
         return 0
 
     def _setup_player(self):
+        """Setup the player board or restore the board, and then notify the player."""
         global shared_boards
 
         self.send_message(f"Welcome back Player ID {self.id}!" if self.restored else f"Welcome Player ID {self.id}!")
@@ -280,6 +278,7 @@ class PlayerSession:
             self.board = shared_boards[self.player_number]
 
     def _wait_for_game_start(self):
+        """Wait for two players to be ready before starting the game."""
         global num_player_ready, game_status
 
         if not self.restored:
@@ -306,6 +305,7 @@ class PlayerSession:
                     break
 
     def _notify_game_start(self):
+        """Notify the players and spectators about the game start."""
         if self.restored:
             print('[GAME] Restored game with opponent.')
             self.send_message(f"Restored game with Player ID {self.opponent_id}.")
@@ -318,6 +318,7 @@ class PlayerSession:
                 print(f"[GAME] Game started! Player ID {self.id} vs Player ID {self.opponent_id}.")
 
     def _game_loop(self):
+        """Main game loop for the player."""
         global game_status, current_turn, left_player_id
 
         while True:
@@ -352,6 +353,7 @@ class PlayerSession:
         self.send_message("Enter coordinate to fire at (e.g. B5):")
 
     def _play_turn(self):
+        """Handle the player's turn."""
         global current_turn, game_status, left_player_id
 
         self._notify_player_turn()
@@ -429,6 +431,7 @@ class PlayerSession:
         return 0
 
     def _process_fire(self, coord):
+        """Process the fire command from the player."""
         global shared_boards, current_turn, game_status
 
         row, col = parse_coordinate(coord)
@@ -467,6 +470,7 @@ class PlayerSession:
                 current_turn = 1 - current_turn
 
     def _cleanup(self):
+        """Cleanup the player session."""
         global current_players, shared_boards, num_player_ready, left_player_id, game_status
 
         try:
