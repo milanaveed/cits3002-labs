@@ -41,7 +41,7 @@ shared_boards = {}
 current_turn = 0 # 0 for player 1, 1 for player 2
 player_ids = {}  # player_id -> player_num
 game_status = None
-RECONNECT_TIMEOUT = 1000
+RECONNECT_TIMEOUT = 60
 left_player_id = -1
 next_players_id = []
 timer = None
@@ -133,6 +133,7 @@ def cancel_reconnection_timer():
         print("[TIMER] Reconnection timer cancelled.")
 
 def countdown(seconds):
+    """Countdown timer for reconnection."""
     for i in range(seconds, 0, -1):
         print(f'{i} seconds remaining...')
         time.sleep(1)

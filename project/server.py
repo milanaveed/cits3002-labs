@@ -14,35 +14,6 @@ from battleship import *
 HOST = '127.0.0.1'
 PORT = 5050
 
-# total_connections = 0
-# connection_waiting_queue = []
-# current_players = {}
-# lock = threading.Lock()
-# num_player_ready = 0
-# shared_boards = {}
-# current_turn = 0 # 0 for player 1, 1 for player 2
-# player_ids = {}  # player_id -> player_num
-# game_status = None
-# RECONNECT_TIMEOUT = 30
-# left_player_id = -1
-# next_players_id = []
-# timer = None
-
-# game_ready_cond = threading.Condition()
-
-# notify_forfeited_r, notify_forfeited_w = socket.socketpair()
-# notify_forfeited_r.setblocking(False)
-# notify_forfeited_w.setblocking(False)
-
-# def send(wfile, msg):
-#     """Helper function to send a message with newline + flush."""
-#     try:
-#         wfile.write(msg + '\n')
-#         wfile.flush()
-#     except Exception as e:
-#         print(f"[ERROR] {e}.\nCould not send to client {wfile}: {msg}")
-
-
 def handle_client(player_id, conn, current_r, current_w):
     player = PlayerSession(player_id, conn, current_r, current_w)
     player.run()
@@ -84,8 +55,33 @@ if __name__ == "__main__":
 
 
 
+# total_connections = 0
+# connection_waiting_queue = []
+# current_players = {}
+# lock = threading.Lock()
+# num_player_ready = 0
+# shared_boards = {}
+# current_turn = 0 # 0 for player 1, 1 for player 2
+# player_ids = {}  # player_id -> player_num
+# game_status = None
+# RECONNECT_TIMEOUT = 30
+# left_player_id = -1
+# next_players_id = []
+# timer = None
 
+# game_ready_cond = threading.Condition()
 
+# notify_forfeited_r, notify_forfeited_w = socket.socketpair()
+# notify_forfeited_r.setblocking(False)
+# notify_forfeited_w.setblocking(False)
+
+# def send(wfile, msg):
+#     """Helper function to send a message with newline + flush."""
+#     try:
+#         wfile.write(msg + '\n')
+#         wfile.flush()
+#     except Exception as e:
+#         print(f"[ERROR] {e}.\nCould not send to client {wfile}: {msg}")
 
 def remove_connection(player_id):
     """Remove a specific connection from the connection waiting queue."""
