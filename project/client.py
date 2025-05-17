@@ -101,10 +101,10 @@ def receive_messages(sock):
     while running:
         try:
             data = recv_full_packet(sock)
-            if not data:
-                print("[INFO] Server disconnected.")
-                os._exit(0) # exit the program immediately
-                break
+            # if not data:
+            #     print("[INFO] Server disconnected.")
+            #     os._exit(0) # exit the program immediately
+            #     break
         
             parsed = parse_packet(data)
             if not parsed:
@@ -208,7 +208,7 @@ def main():
                         send_to_server(s, f"FIRE {user_input}\n")
                         can_fire = False # Reset the turn
                     else: 
-                        print("It's not your turn to fire yet.")
+                        print("It's not your turn to fire yet. Enter 'chat' to send a message. Enter 'quit' to exit.")
                 else: # For invalid input
                     if can_fire:
                         print('Invalid input. Enter a coordinate (e.g. B5) or type "quit" to exit. Type "chat" to send a message.')
