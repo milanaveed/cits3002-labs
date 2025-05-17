@@ -100,10 +100,10 @@ def receive_messages(sock):
     while running:
         try:
             data = recv_full_packet(sock)
-            # if not data:
-            #     print("[INFO] Server disconnected.")
-            #     os._exit(0) # exit the program immediately
-            #     break
+            if not data:
+                print("[INFO] Server disconnected.")
+                os._exit(0) # exit the program immediately
+                break
         
             parsed = parse_packet(data)
             if not parsed:
