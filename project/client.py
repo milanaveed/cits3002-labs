@@ -66,27 +66,6 @@ def get_or_create_client_id():
 
 client_id = get_or_create_client_id()
 
-
-# def send_with_ack(sock, seq, payload):
-#     retries = 3
-#     for attempt in range(retries):
-#         packet = make_packet(seq, TYPE_DATA, payload)
-#         sock.sendall(packet)
-
-#         try:
-#             ack = sock.recv(1024)
-#             parsed = parse_packet(ack)
-#             if parsed and parsed[1] == TYPE_ACK and parsed[0] == seq:
-#                 print(f"[CLIENT] ACK received for seq {seq}")
-#                 return True
-#             else:
-#                 print(f"[CLIENT] Bad ACK or corrupt. Resending (Attempt {attempt+1})")
-#         except socket.timeout:
-#             print(f"[CLIENT] Timeout. Resending (Attempt {attempt+1})")
-
-#     print("[CLIENT] Failed to get ACK after retries. Giving up.")
-#     return False
-
 def send_to_server(sock, msg):
     """Send a message to the server"""
     try:
@@ -136,9 +115,6 @@ def receive_messages(sock):
         except Exception as e:
             print(f"[ERROR] An error occurred while receiving data: {e}")
             break
-
-        # Process and display the message
-        line = line.strip() # remove whitespaces
 
         if line == "GRID":
             # Begin reading board lines
