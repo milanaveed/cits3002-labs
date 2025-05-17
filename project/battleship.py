@@ -12,6 +12,7 @@ import random
 import time
 import select
 import socket
+from packet import *
 
 # BOARD_SIZE = 10
 # SHIPS = [
@@ -52,13 +53,20 @@ notify_forfeited_r, notify_forfeited_w = socket.socketpair()
 notify_forfeited_r.setblocking(False)
 notify_forfeited_w.setblocking(False)
 
-def send(wfile, msg):
-    """Helper function to send a message with newline + flush."""
+# def send(wfile, msg):
+#     """Helper function to send a message with newline + flush."""
+#     try:
+#         wfile.write(msg + '\n')
+#         wfile.flush()
+#     except Exception as e:
+#         print(f"[ERROR] {e}.\nCould not send to client {wfile}: {msg}")
+
+def send(conn, msg, ptype=1):
     try:
-        wfile.write(msg + '\n')
-        wfile.flush()
+        packet = make_packet(0, ptype, msg)
+        conn.sendall(packet)  # Use opponent_conn for other player
     except Exception as e:
-        print(f"[ERROR] {e}.\nCould not send to client {wfile}: {msg}")
+        print(f"[ERROR] Failed to send packet to opponent: {e}")
 
 def remove_connection(player_id):
     """Remove a specific connection from the connection waiting queue."""
@@ -72,22 +80,41 @@ def get_player_number(player_id):
         if value[0] == player_id:
             return key
         
-def send_board(wfile, board):
-    """Send the board state to the player."""
-    send(wfile, "GRID")
-    send(wfile, "  " + " ".join(str(i + 1).rjust(2) for i in range(board.size)))
-    for r in range(board.size):
-        row_label = chr(ord('A') + r)
-        row_str = " ".join(board.display_grid[r][c] for c in range(board.size))
-        send(wfile, f"{row_label:2} {row_str}")
-    send(wfile, "")  # end of board
+# def send_board(wfile, board):
+#     """Send the board state to the player."""
+#     send(wfile, "GRID")
+#     send(wfile, "  " + " ".join(str(i + 1).rjust(2) for i in range(board.size)))
+#     for r in range(board.size):
+#         row_label = chr(ord('A') + r)
+#         row_str = " ".join(board.display_grid[r][c] for c in range(board.size))
+#         send(wfile, f"{row_label:2} {row_str}")
+#     send(wfile, "")  # end of board
+
+
+def send_board(conn, board):
+    """Send the board state to the player using custom packet protocol."""
+    try:
+        # Send board header
+        conn.sendall(make_packet(0, TYPE_DATA, "GRID"))
+        conn.sendall(make_packet(0, TYPE_DATA, "  " + " ".join(str(i + 1).rjust(2) for i in range(board.size))))
+
+        # Send each board row
+        for r in range(board.size):
+            row_label = chr(ord('A') + r)
+            row_str = " ".join(board.display_grid[r][c] for c in range(board.size))
+            conn.sendall(make_packet(0, TYPE_DATA, f"{row_label:2} {row_str}"))
+
+        # Send end-of-board marker (empty line or a special token)
+        conn.sendall(make_packet(0, TYPE_DATA, ""))  # could also be "__END__"
+    except Exception as e:
+        print(f"[ERROR] Failed to send board: {e}")
 
 def broadcast_to_spectators(msg):
     """Send a message to all spectators."""
     global connection_waiting_queue
     try:
         for connection in connection_waiting_queue:
-            send(connection[3], msg)  # connection[3] is the writer
+            send(connection[1], msg) 
     except Exception as e:
         print(f"[ERROR] Error broadcasting to spectators: {e}")
 
@@ -97,9 +124,9 @@ def broadcast_board_to_spectators(board, msg):
     try:
         with lock:
             for connection in connection_waiting_queue:
-                writer = connection[3]
-                send(writer, msg)
-                send_board(writer, board)
+                conn = connection[1]
+                send(conn, msg)
+                send_board(conn, board)
     except Exception as e:  
         print(f"[ERROR] Error broadcasting board to spectators: {e}")
 
@@ -162,11 +189,9 @@ def update_next_players():
 ###############################Start of PlayerSession Class############################
 
 class PlayerSession:
-    def __init__(self, player_id, conn, rfile, wfile):
+    def __init__(self, player_id, conn):
         self.id = player_id
         self.conn = conn
-        self.rfile = rfile
-        self.wfile = wfile
         self.spectator_mode = False
         self.restored = False
         self.player_number = None
@@ -176,6 +201,8 @@ class PlayerSession:
         self.opponent_w = None
         self.board = None
         self.opponent_board = None
+        self.seq = 0
+        self.opponent_conn = None
 
     def run(self):
         """Main loop for the player session."""
@@ -193,27 +220,51 @@ class PlayerSession:
         self._game_loop()
         self._cleanup()
 
-    def send_message(self, msg):
-        """Send a message to the current client."""
-        send(self.wfile, msg)
-
-    def send_opponent_message(self, msg):
-        """Send a message to the opponent."""
+    def send_message(self, msg, ptype=1):
+        packet = make_packet(self.seq, ptype, msg)
         try:
-            if not self.opponent_w.closed:
-                send(self.opponent_w, msg)
-            else:
-                print(f"Opponent socket is closed. Cannot send message: {msg}")
+            self.conn.sendall(packet)
+            self.seq += 1
         except Exception as e:
-            print(f"[ERROR] {e}.\nCould not send to opponent {self.opponent_w}: {msg}")
+            print(f"[ERROR] Error sending packet: {e}")
 
-    def _update_opponent_rwfiles(self):
-        """Update the read/write files of the opponent."""
+    def recv_packet(self, timeout=10):
+        # self.conn.settimeout(timeout)
+        try:
+            data = recv_full_packet(self.conn)
+            if not data:
+                return None
+            parsed = parse_packet(data)
+            return parsed  # (seq, ptype, payload) or None
+        except Exception as e:
+            print(f"[ERROR] Failed to receive or parse packet: {e}")
+            return None
+
+    def recv_opponent_packet(self, timeout=10):
+        try:
+            # self.opponent_conn.settimeout(timeout)
+            data = recv_full_packet(self.opponent_conn)
+            parsed = parse_packet(data)
+            return parsed  # or None if checksum fails
+        except Exception as e:
+            print(f"[ERROR] Failed to read from opponent: {e}")
+            return None
+
+    def send_opponent_message(self, msg, ptype=1):
+        try:
+            packet = make_packet(self.seq, ptype, msg)
+            self.opponent_conn.sendall(packet)  # Use opponent_conn for other player
+            self.seq += 1
+        except Exception as e:
+            print(f"[ERROR] Failed to send packet to opponent: {e}")
+
+    def _update_opponent_conn(self):
+        """Update the connection of the opponent."""
         global left_player_id, current_players
         with lock:
             if left_player_id != -1:
                 if self.opponent_number in current_players:
-                    self.opponent_r, self.opponent_w = current_players[self.opponent_number][2], current_players[self.opponent_number][3]
+                    self.opponent_conn = current_players[self.opponent_number][1]
                 else:
                     print(f"[ERROR] Opponent ID {self.opponent_number} not found in current players.")
 
@@ -225,15 +276,15 @@ class PlayerSession:
         with lock:
             if len(current_players) < 2:
                 self.player_number = 1 if 0 in current_players else 0
-                current_players[self.player_number] = (self.id, self.conn, self.rfile, self.wfile)
+                current_players[self.player_number] = (self.id, self.conn)
             elif self.id == left_player_id and game_status == "ONE PLAYER LEFT":
                 self.player_number = get_player_number(self.id)
-                current_players[self.player_number] = (self.id, self.conn, self.rfile, self.wfile)
+                current_players[self.player_number] = (self.id, self.conn)
                 game_status = "TWO PLAYERS PLAYING"
                 self.restored = True
                 cancel_reconnection_timer()
             else:
-                connection_waiting_queue.append([self.id, self.conn, self.rfile, self.wfile])
+                connection_waiting_queue.append([self.id, self.conn])
                 update_next_players()
                 self.spectator_mode = True
                 print(f"[INFO] Player ID {self.id} is in spectator mode.")
@@ -243,22 +294,25 @@ class PlayerSession:
         self.send_message("Connected to server. Currently in the waiting lobby...")
         self.send_message("__SPECTATOR ON__")
         while self.spectator_mode:
-            message = self.rfile.readline().strip()
-            if message == "QUIT":
-                print(f"[INFO] Spectator with ID {self.id} disconnected.")
-                with lock:
-                    remove_connection(self.id)
-                self.conn.close()
-                return 1
-            elif message == "GAMEOVER":
-                with lock:
-                    if is_next_player(self.id):
-                        self.spectator_mode = False
-                        self.player_number = 1 if 0 in current_players else 0
-                        current_players[self.player_number] = (self.id, self.conn, self.rfile, self.wfile)
-                        msg = f"Player ID{self.id} will be in the next game. Game starting in 2s." if self.player_number == 1 else f"Player ID{self.id} will be in the next game. Waiting for one more player."
-                        broadcast_to_spectators(msg)
-                        self.send_message("__SPECTATOR OFF__")
+            recv = self.recv_packet()
+            if recv:
+                _, _, message = recv
+                message = message.strip()
+                if message == "QUIT":
+                    print(f"[INFO] Spectator with ID {self.id} disconnected.")
+                    with lock:
+                        remove_connection(self.id)
+                    self.conn.close()
+                    return 1
+                elif message == "GAMEOVER":
+                    with lock:
+                        if is_next_player(self.id):
+                            self.spectator_mode = False
+                            self.player_number = 1 if 0 in current_players else 0
+                            current_players[self.player_number] = (self.id, self.conn)
+                            msg = f"Player ID{self.id} will be in the next game. Game starting in 2s." if self.player_number == 1 else f"Player ID{self.id} will be in the next game. Waiting for one more player."
+                            broadcast_to_spectators(msg)
+                            self.send_message("__SPECTATOR OFF__")
         return 0
 
     def _setup_player(self):
@@ -301,7 +355,7 @@ class PlayerSession:
         while True:
             with lock:
                 if self.opponent_number in current_players:
-                    self.opponent_r, self.opponent_w, self.opponent_id = current_players[self.opponent_number][2], current_players[self.opponent_number][3], current_players[self.opponent_number][0]
+                    self.opponent_id, self.opponent_conn, = current_players[self.opponent_number][0], current_players[self.opponent_number][1]
                     self.opponent_board = shared_boards[self.opponent_number]
                     break
 
@@ -343,13 +397,14 @@ class PlayerSession:
 
         print(f"[GAME] Player ID {self.id}'s turn.")
         self.send_message(f"\nPlayer ID {self.id}, it's your turn.")
-        self._update_opponent_rwfiles()
+        # self._update_opponent_rwfiles()
+        self._update_opponent_conn()
 
         with lock:
             if game_status not in ["ONE PLAYER LEFT", "FORFEITED"]:
                 self.send_opponent_message(f"\nPlayer ID {self.opponent_id}, it's your opponent's turn.")
 
-        send_board(self.wfile, self.opponent_board)
+        send_board(self.conn, self.opponent_board)
         self.send_message("__YOUR TURN__")
         self.send_message("Enter coordinate to fire at (e.g. B5):")
 
@@ -360,8 +415,9 @@ class PlayerSession:
         self._notify_player_turn()
 
         if game_status == "TWO PLAYERS PLAYING":
-            self._update_opponent_rwfiles()
-            ready, _, _ = select.select([self.rfile, self.opponent_r], [], [], 30)
+            # self._update_opponent_rwfiles()
+            self._update_opponent_conn()
+            ready, _, _ = select.select([self.conn, self.opponent_conn], [], [], 30)
             if not ready:
                 self.send_message("Timeout! You took too long.")
                 self.send_opponent_message("The other player timed out.")
@@ -369,7 +425,7 @@ class PlayerSession:
                     current_turn = 1 - current_turn
                 return 0
         else:
-            ready, _, _ = select.select([self.rfile, notify_forfeited_r], [], [], 30)
+            ready, _, _ = select.select([self.conn, notify_forfeited_r], [], [], 30)
             if not ready:
                 self.send_message("Timeout! You took too long.")
                 with lock:
@@ -377,10 +433,12 @@ class PlayerSession:
                     time.sleep(5)
                 return 0 # if continue the game loop
 
-        if self.opponent_r in ready:
-            opponent_msg = self.opponent_r.readline()
-            if opponent_msg:
+        if self.opponent_conn in ready:
+            opponent_recv = self.recv_opponent_packet()
+            if opponent_recv:
+                _, _, opponent_msg = opponent_recv
                 opponent_msg = opponent_msg.strip()
+
             if opponent_msg == 'QUIT':
                 self.send_message("The other player has disconnected.")
                 broadcast_to_spectators(f"Player ID {self.opponent_id} disconnected.")
@@ -390,16 +448,18 @@ class PlayerSession:
                 start_reconnection_timer()
                 opponent_msg = None
 
-        if notify_forfeited_r in ready:  # todo: improve
+        if notify_forfeited_r in ready:
             notify_forfeited_r.recv(1024)
             with lock:
                 if game_status == "FORFEITED":
                     return 1
                 
-        self._update_opponent_rwfiles()
+        # self._update_opponent_rwfiles()
+        self._update_opponent_conn()
 
-        guess = self.rfile.readline()
-        if not guess:
+        # guess = self.rfile.readline()
+        recv = self.recv_packet()
+        if not recv:
             self.send_message("Connection lost.")
             self.send_opponent_message("The other player has disconnected.")
             with lock:
@@ -410,6 +470,7 @@ class PlayerSession:
                 current_turn = 1 - current_turn
             return 1
 
+        _, _, guess = recv
         guess = guess.strip()
         if guess == 'QUIT':
             with lock:
@@ -446,7 +507,7 @@ class PlayerSession:
                 broadcast_to_spectators(f"Result: HIT! Player ID {self.id} sank the {sunk_ship}.\n")
                 if self.opponent_board.all_ships_sunk():
                     self.send_message("\nCongratulations! You sank all opponent's ships.")
-                    send_board(self.wfile, self.opponent_board)
+                    send_board(self.conn, self.opponent_board)
                     self.send_message("__GAME OVER__")
                     self.send_opponent_message("\nYou lose. All your ships have been sunk.")
                     self.send_opponent_message("__GAME OVER__")
@@ -494,8 +555,8 @@ class PlayerSession:
         except Exception as e:
             print(f"[ERROR] Error while closing connection: {e}")
         finally:
-            self.rfile.close()
-            self.wfile.close()
+            # self.rfile.close()
+            # self.wfile.close()
             self.conn.close()
 
 ################################End of PlayerSession Class############################

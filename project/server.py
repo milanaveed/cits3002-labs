@@ -14,40 +14,43 @@ from battleship import *
 HOST = '127.0.0.1'
 PORT = 5050
 
-def handle_client(player_id, conn, current_r, current_w):
-    player = PlayerSession(player_id, conn, current_r, current_w)
-    player.run()
-
+def handle_client(conn):
+    try:
+        conn.settimeout(10)
+        data = recv_full_packet(conn)
+        parsed = parse_packet(data)
+        if not parsed:
+            print("[ERROR] Invalid or corrupted initial packet. Dropping connection.")
+            conn.close()
+            return
+        _, _, first_line = parsed
+        if not first_line.startswith("ID "):
+            print("[ERROR] Missing client ID.")
+            conn.close()
+            return
+        client_id = first_line[3:].strip()
+        print(f"[INFO] Player ID {client_id} connected.")
+        player = PlayerSession(client_id, conn)
+        player.run()
+    except Exception as e:
+        print(f"[ERROR] Failed to handle client: {e}")
+        conn.close()
 
 def main():
-    global total_connections, connection_waiting_queue, current_players
-
     print(f"[INFO] Server listening on {HOST}:{PORT}")
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         s.bind((HOST, PORT))
         s.listen()
-        print("[INFO] Waiting for 2 players to start the game...")
 
         try:
             while True:
-                conn, addr = s.accept()
-                rfile = conn.makefile('r')
-                wfile = conn.makefile('w')
-                first_line = rfile.readline().strip()
-                if first_line.startswith("ID "):
-                    client_id = first_line[3:]
-                else:
-                    send(wfile, "Missing client ID. Disconnecting.")
-                    conn.close()
-                    continue
-                print(f"[INFO] Player ID {client_id} connected.")
-                client_thread = threading.Thread(target=handle_client, args=(client_id, conn, rfile, wfile), daemon=True)
-                client_thread.start() 
+                conn, _ = s.accept()
+                threading.Thread(target=handle_client, args=(conn,), daemon=True).start()
         except KeyboardInterrupt:
-            print("\n[INFO] Server manually stopped. Shutting down.")
+            print("\n[INFO] Server manually stopped.")
         except Exception as e:
-            print(f"[ERROR] Unexpected server error: {e}")
+            print(f"[ERROR] Server error: {e}")
 
 
 if __name__ == "__main__":
