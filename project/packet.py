@@ -6,16 +6,10 @@ import struct
 TYPE_DATA = 1
 TYPE_ACK = 2
 TYPE_NACK = 3
+TYPE_CHAT = 4
 
 def compute_checksum(payload: bytes) -> int:
     return zlib.crc32(payload) & 0xffffffff
-
-# def make_packet(seq: int, ptype: int, payload: str) -> bytes:
-#     payload_bytes = str(payload).encode('utf-8')
-#     payload_len = len(payload_bytes)
-#     header = struct.pack('!IBH', seq, ptype, payload_len)
-#     checksum = compute_checksum(payload_bytes)
-#     return header + payload_bytes + struct.pack('!I', checksum)
 
 def make_packet(seq: int, ptype: int, payload: str) -> bytes:
     payload_bytes = payload.encode('utf-8')

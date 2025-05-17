@@ -66,7 +66,7 @@ def get_or_create_client_id():
 
 client_id = get_or_create_client_id()
 
-def send_to_server(sock, msg):
+def send_to_server(sock, msg, ptype=TYPE_DATA):
     """Send a message to the server"""
     try:
         pkt = make_packet(0, TYPE_DATA, str(msg))
@@ -111,10 +111,14 @@ def receive_messages(sock):
                 print("[WARN] Discarded corrupted packet.")
                 continue
 
-            _, _, line = parsed
+            _, ptype, line = parsed
         except Exception as e:
             print(f"[ERROR] An error occurred while receiving data: {e}")
             break
+
+        if ptype == TYPE_CHAT:
+            print(f"{line}")
+            continue
 
         if line == "GRID":
             # Begin reading board lines
@@ -158,7 +162,7 @@ def is_valid_coordinate(coord):
     """Check if input like 'A1', 'B10' is valid (A-J, 1-10)
     returns True if valid, False otherwise
     """
-    return re.fullmatch(r"[A-Ja-j](10|[1-9])", coord.strip()) is not None
+    return re.fullmatch(r"[A-J](10|[1-9])", coord.strip()) is not None
 
 
 def main():
@@ -171,10 +175,6 @@ def main():
             print(f"[ERROR] Could not connect to the server.")
             return
         
-        # rfile = s.makefile('r')
-        # wfile = s.makefile('w')
-        # wfile.write(f"ID {client_id}\n")
-        # wfile.flush()
         send_to_server(s, f"ID {client_id}\n")
 
         # Start a thread for receiving messages
@@ -184,18 +184,22 @@ def main():
         # Main thread handles sending user input
         try:
             while running:
-                user_input = input(">> ")
+                user_input = input("")
                 if not user_input:
                     continue
 
                 # Convert to uppercase for consistency
-                user_input = user_input.strip().upper()
+                user_input = user_input.strip()
 
                 # Check for quit command
-                if user_input == "QUIT":
-                    send_to_server(s, "QUIT")
+                if user_input == "quit":
+                    send_to_server(s, "__QUIT__")
                     print('You quit the game.')
                     running = False
+                elif user_input.startswith("chat"):
+                    message = user_input[4:].strip()
+                    if message:        
+                        send_to_server(s, f'[CHAT] Player ID {client_id}: {message}', TYPE_CHAT)
                 # Check for valid coordinates
                 elif spectator_mode:
                     print("You are in spectator mode. You cannot fire.")
@@ -207,11 +211,11 @@ def main():
                         print("It's not your turn to fire yet.")
                 else: # For invalid input
                     if can_fire:
-                        print('Invalid input. Enter a coordinate (e.g. B5) or type "quit" to exit.')
+                        print('Invalid input. Enter a coordinate (e.g. B5) or type "quit" to exit. Type "chat" to send a message.')
                     else:
                         print("It's not your turn to fire yet.")
         except KeyboardInterrupt:
-            send_to_server(s, "QUIT") # send QUIT command to server
+            send_to_server(s, "__QUIT__") # send QUIT command to server
             print("\n[INFO] Client exiting due to keyboard interruption.")
             print("[INFO] Game ended.\n")
             os._exit(0) # exit the program immediately 
