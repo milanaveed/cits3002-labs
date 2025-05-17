@@ -13,7 +13,6 @@ import hashlib
 import uuid
 import platform
 from pathlib import Path
-from battleship import BOARD_SIZE
 from packet import *
 
 HOST = '127.0.0.1'
@@ -69,7 +68,7 @@ client_id = get_or_create_client_id()
 def send_to_server(sock, msg, ptype=TYPE_DATA):
     """Send a message to the server"""
     try:
-        pkt = make_packet(0, TYPE_DATA, str(msg))
+        pkt = make_packet(0, ptype, str(msg))
         sock.sendall(pkt)
     except Exception as e:
         print(f"[ERROR] Failed to send message: {e}")
