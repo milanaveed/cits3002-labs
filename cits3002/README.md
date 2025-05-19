@@ -1,5 +1,5 @@
 # Battleship  
-**Author:** Mila Zhang (22756463)
+Mila Zhang (22756463)
 
 ## Platform Compatibility
 
