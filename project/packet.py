@@ -4,8 +4,6 @@ import struct
 
 # Packet types
 TYPE_DATA = 1
-TYPE_ACK = 2
-TYPE_NACK = 3
 TYPE_CHAT = 4
 
 def compute_checksum(payload: bytes) -> int:

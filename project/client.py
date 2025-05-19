@@ -11,6 +11,7 @@ import re
 import time
 import hashlib
 import uuid
+import tempfile
 import platform
 from pathlib import Path
 from packet import *
@@ -46,19 +47,22 @@ def get_or_create_client_id():
                 short_id = int(f.read().strip())
 
     elif platform.system() =="Windows":
-        home = Path.home()
-        id_file = home / ".battleship_id"
+        temp_dir = tempfile.gettempdir()
+        session_token = os.environ.get("BATTLESHIP_SESSION")  # optional: allow override
 
-        if not id_file.exists():
-            # Generate a random UUID and hash to 3-digit ID
-            random_uuid = uuid.uuid4().hex
-            hashed = hashlib.sha256(random_uuid.encode()).hexdigest()
+        if not session_token:
+            session_token = uuid.uuid4().hex[:8]  # fallback to random name
+
+        id_file = os.path.join(temp_dir, f"battleship_id_{session_token}")
+
+        if os.path.exists(id_file):
+            with open(id_file, "r") as f:
+                return int(f.read().strip())
+        else:
+            hashed = hashlib.sha256(session_token.encode()).hexdigest()
             short_id = int(hashed, 16) % 1000
             with open(id_file, "w") as f:
                 f.write(str(short_id))
-        else:
-            with open(id_file, "r") as f:
-                short_id = int(f.read().strip())
 
     return short_id
 

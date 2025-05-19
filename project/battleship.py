@@ -40,7 +40,7 @@ lock = threading.Lock()
 num_player_ready = 0
 shared_boards = {}
 current_turn = 0 # 0 for player 1, 1 for player 2
-player_ids = {}  # player_id -> player_num
+player_ids = {}  
 game_status = None
 RECONNECT_TIMEOUT = 60
 left_player_id = -1
@@ -49,7 +49,7 @@ reconnection_timer = None
 active_connections = set()
 GAME_TIMEOUT = 120
 game_timer = None
-TURN_TIMEOUT = 30
+TURN_TIMEOUT = 10
 
 game_ready_cond = threading.Condition()
 
@@ -248,9 +248,8 @@ class PlayerSession:
         except Exception as e:
             print(f"[ERROR] Error sending packet: {e}")
 
-    def recv_packet(self, timeout=10):
+    def recv_packet(self):
         """Receive a packet from the player using custom packet protocol."""
-        # self.conn.settimeout(timeout)
         try:
             data = recv_full_packet(self.conn)
             if not data:
@@ -261,10 +260,9 @@ class PlayerSession:
             print(f"[ERROR] Failed to receive or parse packet: {e}")
             return None
 
-    def recv_opponent_packet(self, timeout=10):
+    def recv_opponent_packet(self):
         """Receive a packet from the opponent using custom packet protocol."""
         try:
-            # self.opponent_conn.settimeout(timeout)
             data = recv_full_packet(self.opponent_conn)
             parsed = parse_packet(data)
             return parsed  # or None if checksum fails
@@ -543,8 +541,8 @@ class PlayerSession:
                 current_turn = 1 - current_turn
                 return 0
             elif game_status == "ONE PLAYER LEFT":
-                self.send_message("It's your opponent's turn.")
-                time.sleep(5)
+                self.send_message("\nIt's your opponent's turn.")
+                time.sleep(10)
                 return 0
 
     def _process_fire(self, coord):
@@ -583,8 +581,11 @@ class PlayerSession:
         broadcast_to_spectators(f"Result: {msg}\n")
 
         with lock:
-            if game_status != "ONE PLAYER LEFT":
+            if game_status == "TWO PLAYERS PLAYING":
                 current_turn = 1 - current_turn
+            else:
+                self.send_message("\nIt's your opponent's turn.")
+                time.sleep(10)
 
     def _cleanup(self):
         """Cleanup the player session."""
