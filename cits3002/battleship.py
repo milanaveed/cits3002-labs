@@ -1,11 +1,15 @@
 """
 battleship.py
 
-Contains core data structures and logic for Battleship, including:
- - Board class for storing ship positions, hits, misses
- - Utility function parse_coordinate for translating e.g. 'B5' -> (row, col)
- - A test harness run_single_player_game() to demonstrate the logic in a local, single-player mode
+Implements the core game logic and data structures for Battleship, including networking,
+turn management, spectator support, reconnections, and game state coordination.
 
+Key components:
+- Board class: Manages ship placement, tracking hits/misses, and win condition.
+- PlayerSession class: Handles individual player state, messaging, turn logic, and cleanup.
+- Game lifecycle management: Includes timers for reconnection, turn, and game timeouts.
+- Spectator support: Allows extra clients to observe the game.
+- Utility functions: Coordinate parsing, board display, and a local single-player test harness.
 """
 import threading
 import random
