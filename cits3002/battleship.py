@@ -14,15 +14,7 @@ import select
 import socket
 from packet import *
 import logging
-import os
 
-# Configure logging
-logging.basicConfig(
-    filename='errors.txt',
-    filemode='a',  # append mode
-    level=logging.INFO,  # only log errors and above (ERROR, CRITICAL)
-    format='%(asctime)s [%(levelname)s] %(message)s',
-)
 
 # BOARD_SIZE = 10
 # SHIPS = [
@@ -70,6 +62,14 @@ notify_forfeited_w.setblocking(False)
 notify_game_timeout_r, notify_game_timeout_w = socket.socketpair()
 notify_game_timeout_r.setblocking(False)
 notify_game_timeout_w.setblocking(False)
+
+# Configure logging
+logging.basicConfig(
+    filename='errors.txt',
+    filemode='a',  # append mode
+    level=logging.INFO,  # only log errors and above (ERROR, CRITICAL)
+    format='%(asctime)s [%(levelname)s] %(message)s',
+)
 
 def send(conn, msg, ptype=1):
     """Send a message to the player (client side) using custom packet protocol."""

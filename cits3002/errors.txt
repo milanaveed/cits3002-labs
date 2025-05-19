@@ -1,0 +1,18 @@
+2025-05-19 22:03:10,901 [INFO] [DEBUG1] opponent_conn exists: <socket.socket fd=10, family=2, type=1, proto=0, laddr=('127.0.0.1', 5050), raddr=('127.0.0.1', 63724)>
+2025-05-19 22:03:16,697 [INFO] [DEBUG1] opponent_conn exists: <socket.socket fd=9, family=2, type=1, proto=0, laddr=('127.0.0.1', 5050), raddr=('127.0.0.1', 63720)>
+2025-05-19 22:03:18,453 [INFO] [DEBUG1] opponent_conn exists: <socket.socket fd=10, family=2, type=1, proto=0, laddr=('127.0.0.1', 5050), raddr=('127.0.0.1', 63724)>
+2025-05-19 22:03:48,529 [INFO] [DEBUG1] opponent_conn exists: <socket.socket fd=9, family=2, type=1, proto=0, laddr=('127.0.0.1', 5050), raddr=('127.0.0.1', 63720)>
+2025-05-19 22:04:03,075 [INFO] [DEBUG1] opponent_conn exists: <socket.socket fd=10, family=2, type=1, proto=0, laddr=('127.0.0.1', 5050), raddr=('127.0.0.1', 63724)>
+2025-05-19 22:04:07,571 [INFO] [DEBUG1] opponent_conn exists: <socket.socket fd=11, family=2, type=1, proto=0, laddr=('127.0.0.1', 5050), raddr=('127.0.0.1', 63732)>
+2025-05-19 22:04:37,669 [INFO] [DEBUG1] opponent_conn exists: <socket.socket fd=12, family=2, type=1, proto=0, laddr=('127.0.0.1', 5050), raddr=('127.0.0.1', 63757)>
+2025-05-19 22:04:46,789 [INFO] [DEBUG1] opponent_conn exists: <socket.socket fd=11, family=2, type=1, proto=0, laddr=('127.0.0.1', 5050), raddr=('127.0.0.1', 63732)>
+2025-05-19 22:04:49,242 [INFO] [DEBUG2] opponent_conn: <socket.socket fd=11, family=2, type=1, proto=0, laddr=('127.0.0.1', 5050), raddr=('127.0.0.1', 63732)>
+2025-05-19 22:04:49,273 [INFO] [DEBUG4] data from opponent: b'\x00\x00\x00\x00\x04\x00\x1a[CHAT] Player ID 807: ahha\xe5k^\xcb'
+2025-05-19 22:04:49,279 [INFO] [DEBUG5] parsed from opponent: (0, 4, '[CHAT] Player ID 807: ahha')
+2025-05-19 22:04:49,285 [INFO] [DEBUG2] opponent_recv: (0, 4, '[CHAT] Player ID 807: ahha')
+2025-05-19 22:04:49,292 [INFO] [DEBUG1] opponent_conn exists: <socket.socket fd=11, family=2, type=1, proto=0, laddr=('127.0.0.1', 5050), raddr=('127.0.0.1', 63732)>
+2025-05-19 22:04:58,925 [INFO] [DEBUG1] opponent_conn exists: <socket.socket fd=11, family=2, type=1, proto=0, laddr=('127.0.0.1', 5050), raddr=('127.0.0.1', 63732)>
+2025-05-19 22:05:02,792 [INFO] [DEBUG1] opponent_conn exists: <socket.socket fd=12, family=2, type=1, proto=0, laddr=('127.0.0.1', 5050), raddr=('127.0.0.1', 63757)>
+2025-05-19 22:05:04,744 [INFO] [DEBUG1] opponent_conn exists: <socket.socket fd=11, family=2, type=1, proto=0, laddr=('127.0.0.1', 5050), raddr=('127.0.0.1', 63732)>
+2025-05-19 22:05:07,375 [INFO] [DEBUG1] opponent_conn exists: <socket.socket fd=12, family=2, type=1, proto=0, laddr=('127.0.0.1', 5050), raddr=('127.0.0.1', 63757)>
+2025-05-19 22:05:09,623 [INFO] [DEBUG1] opponent_conn exists: <socket.socket fd=11, family=2, type=1, proto=0, laddr=('127.0.0.1', 5050), raddr=('127.0.0.1', 63732)>
