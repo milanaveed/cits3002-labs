@@ -65,5 +65,3 @@
 2025-05-19 23:03:56,799 [INFO] [DEBUG1] opponent_conn exists: <socket.socket fd=10, family=2, type=1, proto=0, laddr=('127.0.0.1', 5050), raddr=('127.0.0.1', 49917)>
 2025-05-19 23:04:57,690 [INFO] [DEBUG1] opponent_conn exists: <socket.socket fd=12, family=2, type=1, proto=0, laddr=('127.0.0.1', 5050), raddr=('127.0.0.1', 49909)>
 2025-05-19 23:05:27,767 [INFO] [DEBUG1] opponent_conn exists: <socket.socket fd=11, family=2, type=1, proto=0, laddr=('127.0.0.1', 5050), raddr=('127.0.0.1', 49906)>
-2025-05-19 23:05:57,867 [INFO] [DEBUG1] opponent_conn exists: <socket.socket fd=12, family=2, type=1, proto=0, laddr=('127.0.0.1', 5050), raddr=('127.0.0.1', 49909)>
-2025-05-19 23:06:27,943 [INFO] [DEBUG1] opponent_conn exists: <socket.socket fd=11, family=2, type=1, proto=0, laddr=('127.0.0.1', 5050), raddr=('127.0.0.1', 49906)>
