@@ -1,8 +1,13 @@
 """
 client.py
 
-Connects to a Battleship server which runs the game.
-Simply pipes user input to the server, and prints all server responses.
+Battleship client script that connects to a local server, manages game interaction,
+and supports spectator mode, chat, and reconnection via client ID.
+
+- Automatically or manually generates a 3-digit client ID (macOS auto, Windows manual).
+- Sends user input (commands, coordinates, chat) to the server.
+- Receives and displays messages, game state updates, and board views.
+- Supports turn-based firing, game quitting, and transition between player/spectator roles.
 """
 import os
 import socket
@@ -10,10 +15,7 @@ import threading
 import re
 import time
 import hashlib
-import uuid
-import tempfile
 import platform
-from pathlib import Path
 from packet import *
 
 HOST = '127.0.0.1'
@@ -25,6 +27,7 @@ can_fire = False
 spectator_mode = False
 
 def countdown(seconds):
+    """Countdown timer for the given number of seconds."""
     for i in range(seconds-1, 0, -1):
         print(f'{i} seconds remaining...')
         time.sleep(1)
@@ -48,6 +51,7 @@ def get_or_create_client_id():
                 short_id = int(f.read().strip())
 
     elif platform.system() =="Windows":
+        # Ask the user for a 3-digit ID
         short_id = None
         while not short_id:
             user_input = input("Enter your user ID (3 digits): ").strip()
@@ -59,7 +63,7 @@ def get_or_create_client_id():
     return short_id
 
 
-client_id = get_or_create_client_id()
+client_id = get_or_create_client_id() # Generate a unique ID for the client
 
 def send_to_server(sock, msg, ptype=TYPE_DATA):
     """Send a message to the server"""
@@ -71,6 +75,7 @@ def send_to_server(sock, msg, ptype=TYPE_DATA):
 
 
 def recv_full_packet(sock) -> bytes:
+    """Receive a full packet from the server"""
     try:
         # Read the 4-byte length prefix
         length_data = sock.recv(4)
@@ -111,7 +116,7 @@ def receive_messages(sock):
             print(f"[ERROR] An error occurred while receiving data: {e}")
             break
 
-        if ptype == TYPE_CHAT:
+        if ptype == TYPE_CHAT: # Chat message
             print(f"{line}")
             continue
 
@@ -130,22 +135,22 @@ def receive_messages(sock):
                 if not board_line or board_line.strip() == "":
                     break
                 print(board_line.strip())
-        elif line == "__YOUR TURN__":
+        elif line == "__YOUR TURN__": # Your turn to fire
             can_fire = True
-        elif line == "__GAME OVER__":
+        elif line == "__GAME OVER__": # Game over
             print("[INFO] Game ended.\n")
             running = False
             os._exit(0) # exit the program immediately
-        elif line == "__FORFEITED__":
+        elif line == "__FORFEITED__": # Other player forfeited
             print("The other player forfeited. You win!\n")
             running = False
             os._exit(0) # exit the program immediately
-        elif line == "__SPECTATOR ON__":
+        elif line == "__SPECTATOR ON__": # Spectator mode
             print("You are now in spectator mode. You will see updates but cannot play.")
             spectator_mode = True
-        elif line == "__GAME OVER SPECTATOR__":
+        elif line == "__GAME OVER SPECTATOR__": # Game over in spectator mode
             send_to_server(sock, "GAMEOVER")
-        elif line == "__SPECTATOR OFF__":
+        elif line == "__SPECTATOR OFF__": # Exit spectator mode
             spectator_mode = False
             print("You are a player now.")
         else:
@@ -170,7 +175,7 @@ def main():
             print(f"[ERROR] Could not connect to the server.")
             return
         
-        send_to_server(s, f"ID {client_id}\n")
+        send_to_server(s, f"ID {client_id}\n") # Send ID to server
 
         # Start a thread for receiving messages
         receiver_thread = threading.Thread(target=receive_messages, args=(s,), daemon=True)
@@ -192,7 +197,8 @@ def main():
                     time.sleep(5) # Give the server time to process the quit command
                     print('You quit the game.')
                     running = False
-                elif user_input.startswith("chat"):
+                # Check for chat message
+                elif user_input.startswith("chat"): 
                     message = user_input[4:].strip()
                     if message:        
                         send_to_server(s, f'[CHAT] Player ID {client_id}: {message}', TYPE_CHAT)

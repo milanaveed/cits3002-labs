@@ -1,0 +1,10 @@
+name: cits3002
+channels:
+  - https://repo.anaconda.com/pkgs/main
+  - https://repo.anaconda.com/pkgs/r
+dependencies:
+  - python=3.12.9
+  - ipykernel
+  - matplotlib
+  - pandas
+prefix: /opt/anaconda3/envs/cits3002
