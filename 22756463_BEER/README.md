@@ -1,5 +1,6 @@
 # Battleship  
 Author: Mila Zhang (22756463)
+
 Demo: https://youtu.be/48L8GeLMMas
 
 ## Platform Compatibility
